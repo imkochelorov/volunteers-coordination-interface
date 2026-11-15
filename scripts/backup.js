@@ -1,0 +1,11 @@
+import { DatabaseSync, backup } from 'node:sqlite';
+import { mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+const source = resolve(process.env.DATABASE_PATH || 'data/app.sqlite');
+const target = resolve(process.argv[2] || `backups/app-${new Date().toISOString().replaceAll(':','-')}.sqlite`);
+if (target === source) throw new Error('Резервная копия должна отличаться от рабочей базы.');
+mkdirSync(dirname(target), {recursive:true});
+const db = new DatabaseSync(source, {readOnly:true});
+await backup(db,target);
+db.close();
+console.log(`Резервная копия: ${target}`);

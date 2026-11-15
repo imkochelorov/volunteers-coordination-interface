@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4319
+      DATABASE_PATH: /app/data/app.sqlite
+    ports:
+      - "127.0.0.1:4319:4319"
+    volumes:
+      - app-data:/app/data
+
+volumes:
+  app-data:
