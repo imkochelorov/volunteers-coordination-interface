@@ -3,11 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.2.0" },
+  "engines": {
+    "node": ">=24.2.0"
+  },
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check lib/db.js && node --check lib/domain.js && node --check lib/telegram.js && node --check public/app.js",
-    "backup": "node --env-file-if-exists=.env scripts/backup.js"
+    "check": "node --check server.js && node --check lib/db.js && node --check lib/domain.js && node --check lib/telegram.js && node --check public/app.js && node --check scripts/stress-audit.js && node --check scripts/audit-server.js && node --check scripts/backup.js",
+    "backup": "node --env-file-if-exists=.env scripts/backup.js",
+    "audit:stress": "node --expose-gc scripts/stress-audit.js",
+    "audit:server": "node scripts/audit-server.js"
   }
 }

@@ -208,3 +208,18 @@ test('HTTP + Telegram: приглашение не сохраняется отк
   assert.equal(result.show_alert,true);
   assert.equal(f.app.domain.user(f.volunteer.id).telegramId,null);
 });
+
+test('HTTP: только администратор создаёт и переименовывает холлы; коллизии и смена типа запрещены', async t => {
+  const f=await setup(t);
+  const post=(session,body)=>f.request('/api/admin/tags',{method:'POST',session,body});
+  assert.equal((await post(f.session,{name:'Hall 6',kind:'hall'})).status,403);
+  const added=await post(f.admin,{name:'Hall 6',kind:'hall'});
+  assert.equal(added.status,200);
+  const renamed=await post(f.admin,{id:added.body.id,name:'Аудитория «Север»',kind:'hall'});
+  assert.equal(renamed.status,200);
+  assert.equal(renamed.body.id,added.body.id);
+  assert.equal((await post(f.admin,{id:added.body.id,name:'Hall 1',kind:'hall'})).status,409);
+  assert.equal((await post(f.admin,{id:added.body.id,name:'Направление',kind:'direction'})).status,409);
+  const bootstrap=(await f.request('/api/bootstrap',{session:f.session})).body;
+  assert.equal(bootstrap.tags.find(x=>x.id===added.body.id).name,'Аудитория «Север»');
+});

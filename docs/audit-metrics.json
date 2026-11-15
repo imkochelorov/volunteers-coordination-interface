@@ -1,0 +1,220 @@
+{
+  "measuredAt": "2026-11-15T15:05:32.418Z",
+  "node": "v26.5.0",
+  "liveTelegram": false,
+  "requestLoad": {
+    "mode": "HTTP request handler + real SQLite (no TCP)",
+    "concurrency": 50,
+    "poolSize": 200,
+    "claimRace": {
+      "requests": 50,
+      "p50Ms": 4.344,
+      "p95Ms": 4.598,
+      "maxMs": 4.641,
+      "elapsedMs": 4.73,
+      "statuses": {
+        "200": 1,
+        "409": 49
+      }
+    },
+    "assignmentRace": {
+      "requests": 50,
+      "p50Ms": 11.53,
+      "p95Ms": 11.773,
+      "maxMs": 11.823,
+      "elapsedMs": 11.84,
+      "statuses": {
+        "200": 1,
+        "409": 49
+      }
+    },
+    "mixedRace": {
+      "requests": 50,
+      "p50Ms": 4.694,
+      "p95Ms": 4.948,
+      "maxMs": 4.99,
+      "elapsedMs": 5.007,
+      "statuses": {
+        "200": 1,
+        "409": 49
+      }
+    },
+    "massAssignment": {
+      "recipients": 200,
+      "messages": 200,
+      "elapsedMs": 75.169,
+      "duplicateAssignments": 0,
+      "duplicateInitialMessages": 0
+    },
+    "callbackAccept": {
+      "requests": 50,
+      "p50Ms": 17.319,
+      "p95Ms": 33.025,
+      "maxMs": 37.393,
+      "elapsedMs": 37.418,
+      "statuses": {
+        "ok": 50
+      }
+    },
+    "callbackComplete": {
+      "requests": 50,
+      "p50Ms": 1.455,
+      "p95Ms": 3.163,
+      "maxMs": 4.035,
+      "elapsedMs": 4.049,
+      "statuses": {
+        "ok": 1,
+        "controlled_rejection": 49
+      }
+    },
+    "duplicateUpdates": {
+      "requests": 50,
+      "p50Ms": 0.38,
+      "p95Ms": 0.626,
+      "maxMs": 0.696,
+      "elapsedMs": 0.72,
+      "statuses": {
+        "controlled_rejection": 1,
+        "ok": 49
+      }
+    },
+    "callbackRefreshDelivery": {
+      "pendingJobsBeforeDelivery": 200,
+      "actualCardEdits": 200,
+      "consumerCoalescedJobs": 0,
+      "elapsedMs": 66.524
+    },
+    "questions": {
+      "requests": 20,
+      "p50Ms": 304.889,
+      "p95Ms": 305.001,
+      "maxMs": 305.039,
+      "elapsedMs": 305.067,
+      "statuses": {
+        "200": 20
+      },
+      "recipientCount": 299,
+      "notifications": 5980,
+      "duplicateNotifications": 0
+    },
+    "readBurst": {
+      "requests": 200,
+      "p50Ms": 20.17,
+      "p95Ms": 37.449,
+      "maxMs": 39.323,
+      "elapsedMs": 39.375,
+      "statuses": {
+        "200": 200
+      }
+    },
+    "serverErrors": 0,
+    "unexpectedRejections": 0,
+    "sqliteBusyErrors": 0,
+    "memory": {
+      "rssBeforeMiB": 58.36,
+      "rssAfterMiB": 161.84,
+      "heapBeforeMiB": 8.13,
+      "heapAfterMiB": 27.16,
+      "note": "Includes test request objects, retained fake API calls and intentional database/outbox growth; a snapshot is not proof against long-term leaks."
+    },
+    "resourcesBefore": [
+      "PipeWrap"
+    ],
+    "resourcesAtPeak": [
+      "PipeWrap"
+    ],
+    "persistedRows": {
+      "tasks": 5,
+      "users": 300,
+      "outbox": 10361,
+      "pendingOutbox": 9960
+    }
+  },
+  "resourceProbe": {
+    "measured": true,
+    "cycles": 5,
+    "tasksPerCycle": 100,
+    "parallelReadsPerCycle": 50,
+    "retainedGrowthAfterWarmupMiB": 0.06,
+    "growthBudgetMiB": 8,
+    "samples": [
+      {
+        "cycle": 1,
+        "heapMiB": 11.14,
+        "rssMiB": 196.73,
+        "resources": [
+          "PipeWrap"
+        ]
+      },
+      {
+        "cycle": 2,
+        "heapMiB": 11.12,
+        "rssMiB": 206.89,
+        "resources": [
+          "PipeWrap"
+        ]
+      },
+      {
+        "cycle": 3,
+        "heapMiB": 11.16,
+        "rssMiB": 209.73,
+        "resources": [
+          "PipeWrap"
+        ]
+      },
+      {
+        "cycle": 4,
+        "heapMiB": 11.16,
+        "rssMiB": 209.73,
+        "resources": [
+          "PipeWrap"
+        ]
+      },
+      {
+        "cycle": 5,
+        "heapMiB": 11.18,
+        "rssMiB": 209.73,
+        "resources": [
+          "PipeWrap"
+        ]
+      }
+    ],
+    "note": "Short repeatability probe only; excludes TCP connection leaks because network listening is denied in this environment."
+  },
+  "sqliteContention": {
+    "layer": "independent Worker threads, one SQLite WAL file",
+    "concurrency": 50,
+    "requests": 50,
+    "p50Ms": 18.767,
+    "p95Ms": 369.205,
+    "maxMs": 478.846,
+    "elapsedMs": 704.04,
+    "success": 1,
+    "controlledConflicts": 49,
+    "sqliteBusyErrors": 0,
+    "assignments": 1
+  },
+  "crashRecovery": {
+    "layer": "real child process SIGKILL + SQLite reopen",
+    "signal": "SIGKILL",
+    "committedTaskState": "in_progress",
+    "historyRows": 5,
+    "questionMessages": 2,
+    "uncommittedChangesRolledBack": true,
+    "telegramEventDedupePreserved": true,
+    "outboxRows": 5,
+    "integrity": "ok",
+    "elapsedMs": 190.995
+  },
+  "afterCleanup": {
+    "includesWorkerRuntimeHighWater": true,
+    "heapMiB": 8.97,
+    "rssMiB": 797.83,
+    "activeResources": [
+      "PipeWrap",
+      "PipeWrap",
+      "ProcessWrap"
+    ]
+  },
+  "ok": true
+}

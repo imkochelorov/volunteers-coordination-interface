@@ -402,3 +402,27 @@ test('переименованные общие теги после переза
   assert.equal(domain.tags().find(tag => tag.id === f.tc).name, 'Техкомитет');
   assert.ok(!domain.tags().some(tag => tag.name === 'TC'));
 });
+
+test('переименование холла сохраняет выполняемые назначения, права менеджера и связи после перезапуска', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'nerc-hall-edit-'));
+  t.after(() => rmSync(directory, {recursive:true,force:true}));
+  const path = join(directory,'app.sqlite');
+  const f = fixture(path);
+  const task = f.create(2,{hallIds:[f.hall1]});
+  f.domain.assignTask(f.u(2),task.id,{mode:'manual',volunteerIds:[4,5]});
+  const before = f.domain.acceptTask(f.u(4),task.id,1);
+  f.domain.adminSaveTag(f.u(1),{id:f.hall1,name:'Главный зал',kind:'hall'});
+  const after = f.domain.task(f.u(2),task.id);
+  assert.equal(after.status,'in_progress');
+  assert.equal(after.generation,before.generation);
+  assert.deepEqual(after.assignments,before.assignments);
+  assert.equal(after.canWork,true);
+  assert.equal(f.domain.user(2).homeHallId,f.hall1);
+  assert.ok(f.domain.listTasks(f.u(2),{scope:'home'}).some(x=>x.id===task.id));
+  f.close();
+  const db = openDatabase(path); t.after(()=>db.close());
+  const domain = new Domain(db);
+  assert.equal(domain.tags().find(x=>x.id===f.hall1).name,'Главный зал');
+  assert.ok(!domain.tags().some(x=>x.name==='Hall 1'));
+  assert.equal(domain.task(domain.user(2),task.id).hallId,f.hall1);
+});
