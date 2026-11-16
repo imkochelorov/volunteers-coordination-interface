@@ -1,11 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-
-export function openDatabase(path = 'data/coordination.sqlite') {
-  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path);
-  db.exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
+PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, kind TEXT NOT NULL CHECK(kind IN ('hall','direction')));
     CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, login TEXT UNIQUE, password_hash TEXT, roles TEXT NOT NULL DEFAULT '[]', tag_ids TEXT NOT NULL DEFAULT '[]', home_hall_id INTEGER REFERENCES tags(id), manager_id INTEGER REFERENCES users(id), available INTEGER NOT NULL DEFAULT 1, telegram_id INTEGER UNIQUE, chat_id INTEGER, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -32,9 +25,4 @@ export function openDatabase(path = 'data/coordination.sqlite') {
     CREATE INDEX IF NOT EXISTS outbox_due ON outbox(status,next_attempt);
     CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id,id);
     PRAGMA user_version = 1;
-  `);
-  const insertTag = db.prepare('INSERT OR IGNORE INTO tags(name,kind) VALUES (?,?)');
-  if (db.prepare('SELECT COUNT(*) AS count FROM tags').get().count === 0) for (const name of ['TC','TC Assistant','Press','Ceremony','Registration','Baloons','Live','Hall 1','Hall 2','Hall 3','Hall 4','Hall 5','Space']) insertTag.run(name, name.startsWith('Hall ') ? 'hall' : 'direction');
-  db.prepare("INSERT OR IGNORE INTO settings(key,value) VALUES ('crossHall','false')").run();
-  return db;
-}
+CREATE TABLE IF NOT EXISTS request_keys (user_id INTEGER NOT NULL, request_key TEXT NOT NULL, fingerprint TEXT NOT NULL, response TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(user_id,request_key));

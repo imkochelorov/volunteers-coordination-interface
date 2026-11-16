@@ -1,35 +1,13 @@
-const $ = (selector, root = document) => root.querySelector(selector);
-const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const paths = {
-  grid:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
-  list:'M9 6h12 M9 12h12 M9 18h12 M3 6h.01 M3 12h.01 M3 18h.01',
-  check:'M5 12l4 4L19 6',
-  message:'M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z',
-  users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
-  hall:'M3 21h18 M5 21V5l7-3 7 3v16 M9 8h.01 M15 8h.01 M9 12h.01 M15 12h.01 M10 21v-5h4v5',
-  settings:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z M3 12l2-2-.2-3 3-.2L10 4l2 1 2-1 2.2 2.8 3 .2-.2 3 2 2-2 2 .2 3-3 .2L14 20l-2-1-2 1-2.2-2.8-3-.2.2-3-2-2Z',
-  plus:'M12 5v14 M5 12h14',
-  search:'M21 21l-4.3-4.3 M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z',
-  clock:'M12 8v4l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z',
-  alert:'M12 8v4 M12 16h.01 M10.3 3.9 1.8 18.6A1.6 1.6 0 0 0 3.2 21h17.6a1.6 1.6 0 0 0 1.4-2.4L13.7 3.9a2 2 0 0 0-3.4 0Z',
-  close:'M6 6l12 12 M6 18 18 6',
-  arrow:'M7 17 17 7 M7 7h10v10',
-  logout:'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9',
-  menu:'M3 6h18 M3 12h18 M3 18h18',
-  send:'m22 2-7 20-4-9-9-4L22 2Z M22 2 11 13',
-  lock:'M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4',
-  refresh:'M20 7v5h-5 M4 17v-5h5 M6.1 7a7 7 0 0 1 11.55-2L20 8 M4 16l2.35 3A7 7 0 0 0 17.9 17',
-  tag:'M20.6 13.6 13.6 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8Z M7 7h.01',
-  inbox:'M4 4h16l2 12v4H2v-4L4 4Z M2 16h6l2 3h4l2-3h6',
-  bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4',
-  bolt:'m13 2-9 12h7l-1 8 10-12h-7l1-8Z',
-};
-const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.list}"/></svg>`;
-const state = {boot:null,view:'tasks',scope:'all',hallId:'',tagId:'',box:'incoming',tasks:[],questions:[],volunteers:[],deliveries:[],filters:{status:'',assignment:'',q:'',blocked:false,openQuestions:false},detailId:null,detail:null,modalType:null,offline:false,polling:false};
+import { $, $$, esc, icon, brand } from "./ui.js";
+import { portraitScene, bindPortraitScene, bindHeroField } from "./landing.js";
+import { landingContent, landingMenu, bindLandingContent } from "./landing-content.js";
+
+const initialFilters = () => ({status:'',assignment:'',q:'',blocked:false,openQuestions:false});
+const state = {boot:null,view:'tasks',scope:'all',hallId:'',tagId:'',box:'incoming',tasks:[],questions:[],volunteers:[],deliveries:[],filters:initialFilters(),detailId:null,detail:null,modalType:null,offline:false,polling:false};
 const statusNames = {queued:'В очереди',in_progress:'В процессе',done:'Выполнена',cancelled:'Отменена'};
 const roleNames = {admin:'Администратор',organizer:'Организатор',manager:'Менеджер',volunteer:'Волонтёр'};
 const eventNames = {created:'Задача опубликована',task_created:'Задача опубликована',claimed:'Задача взята в работу',task_claimed:'Задача взята в работу',assigned:'Назначены волонтёры',task_assigned:'Назначены волонтёры',accepted:'Волонтёр начал выполнение',task_accepted:'Волонтёр начал выполнение',completed:'Задача выполнена',task_completed:'Задача выполнена',done:'Задача выполнена',cancelled:'Задача отменена',task_cancelled:'Задача отменена',reset:'Задача возвращена в очередь',task_reset:'Задача возвращена в очередь',question_created:'Задан вопрос',question_replied:'Добавлен ответ',question_answered:'Добавлен ответ',question_forwarded:'Вопрос передан адресатам',question_closed:'Вопрос решён'};
+const mobileViewport = matchMedia('(max-width: 800px)');
 const listFrom = (value, key) => Array.isArray(value) ? value : value?.[key] || [];
 const ids = values => [...new Set((values || []).map(Number).filter(Number.isFinite))];
 const me = () => state.boot?.user || {};
@@ -55,7 +33,7 @@ const isParticipant = task => hasRole('admin') || [task.authorId,task.claimedBy,
 const canWork = task => {
   if (typeof task.canWork === 'boolean') return task.canWork;
   if (hasRole('admin') || !task.hallId) return true;
-  const myHalls = hasRole('manager') && me().homeHallId ? [Number(me().homeHallId)] : ids(me().tagIds).filter(id=>getTag(id)?.kind==='hall');
+  const myHalls = me().homeHallId ? [Number(me().homeHallId)] : ids(me().tagIds).filter(id=>getTag(id)?.kind==='hall');
   return myHalls.includes(Number(task.hallId)) || !!state.boot?.settings?.crossHall;
 };
 function toast(message, error = false) {
@@ -64,34 +42,149 @@ function toast(message, error = false) {
 }
 async function api(path, options = {}) {
   const headers = {'Accept':'application/json',...options.headers};
-  if(options.method && options.method!=='GET') {headers['Content-Type']='application/json';if(state.boot?.csrf)headers['X-CSRF-Token']=state.boot.csrf;headers['Idempotency-Key']=crypto.randomUUID();}
+  if(options.method && options.method!=='GET') {headers['Content-Type']='application/json';if(state.boot?.csrf)headers['X-CSRF-Token']=state.boot.csrf;headers['Idempotency-Key']=Array.from(crypto.getRandomValues(new Uint8Array(16)), byte=>byte.toString(16).padStart(2,'0')).join('');}
   const response = await fetch(path,{credentials:'same-origin',...options,headers,body:options.body===undefined?undefined:JSON.stringify(options.body)});
   let result;try{result=await response.json();}catch{result={error:'Сервер вернул непонятный ответ. Попробуйте ещё раз.'};}
-  if(!response.ok){if(response.status===401 && state.boot){state.boot=null;closeModal();renderLogin('Сессия завершилась. Войдите снова.');}throw new Error(result.error || 'Не удалось выполнить действие');}
+  if(!response.ok){if(response.status===401 && state.boot){state.boot=null;closeModal();renderLogin('Сессия завершилась. Войдите снова.');}throw Object.assign(new Error(result.error || 'Не удалось выполнить действие'),{status:response.status});}
   return result;
 }
 const post = (path, body={}) => api(path,{method:'POST',body});
 function empty(title,description,action='') {return `<div class="empty"><div class="empty-icon">${icon('inbox')}</div><h3>${esc(title)}</h3><p>${esc(description)}</p>${action}</div>`;}
 function titleForView() {
   if(state.view==='tasks')return state.scope==='mine'?'Мои задачи':state.scope==='home'?'Мой холл':state.scope==='hall'?tagName(state.hallId):state.tagId?tagName(state.tagId):'Все задачи';
-  return {questions:{incoming:'Входящие вопросы',outgoing:'Исходящие вопросы',volunteer:'Вопросы волонтёров',unaddressed:'Вопросы без тегов'}[state.box],volunteers:'Мои волонтёры',admin:'Управление штабом',deliveries:'Доставка в Telegram',account:'Мой профиль',notifications:'Уведомления'}[state.view] || 'Штаб';
+  return {questions:{incoming:'Входящие вопросы',outgoing:'Исходящие вопросы',volunteer:'Вопросы волонтёров',unaddressed:'Вопросы без тегов'}[state.box],volunteers:'Мои волонтёры',admin:'Администрирование',deliveries:'Доставка в Telegram',account:'Мой профиль',notifications:'Уведомления'}[state.view] || 'связь?';
 }
 function navButton(view,label,iconName,extra={}) {
  const active=state.view===view && Object.entries(extra).every(([key,val])=>String(state[key])===String(val));
- return `<button type="button" class="nav-button ${active?'active':''}" data-nav="${view}" ${Object.entries(extra).map(([key,val])=>`data-${key.toLowerCase()}="${esc(val)}"`).join(' ')}>${icon(iconName)}<span>${esc(label)}</span></button>`;
+ return `<button type="button" class="nav-button ${active?'active':''}" data-nav="${view}" ${active?'aria-current="page"':''} ${Object.entries(extra).map(([key,val])=>`data-${key.toLowerCase()}="${esc(val)}"`).join(' ')}>${icon(iconName)}<span>${esc(label)}</span></button>`;
 }
-function renderLogin(error='') {
- $('#app').innerHTML=`<main class="login-page"><section class="login-story"><div class="brand"><span class="brand-mark">${icon('bolt')}</span><div><strong>ШТАБ</strong><small>КООРДИНАЦИЯ МЕРОПРИЯТИЯ</small></div></div><h1>Каждая задача.<br>Нужные люди.<br>Общий результат.</h1><p>Рабочее пространство организаторов и менеджеров. Волонтёры получают задания и отвечают через Telegram.</p><div class="login-lines"><i></i><i></i><i></i></div></section><section class="login-form-wrap"><form id="login-form" class="login-form form-stack"><div><h2>Добро пожаловать</h2><p class="muted">Войдите в рабочее пространство мероприятия</p></div><label class="field">Логин<input name="login" autocomplete="username" required autofocus placeholder="Ваш логин"></label><label class="field">Пароль<input name="password" type="password" autocomplete="current-password" required placeholder="Ваш пароль"></label>${error?`<div class="inline-error">${esc(error)}</div>`:''}<button class="button primary" type="submit">Войти в штаб ${icon('arrow')}</button><p class="login-footnote">Доступ создаёт администратор мероприятия.<br>Волонтёрам достаточно подключиться к Telegram-боту.</p></form></section></main>`;
+let disposeLanding;
+
+function renderLogin(error = "") {
+  disposeLanding?.();
+  $("#app").innerHTML = `<main class="login-page">
+    ${portraitScene()}
+    <header class="landing-header">
+      <a class="landing-home" href="#landing-hero" aria-label="На главный экран">${brand}</a>
+      <img class="landing-emblem" src="/assets/nerc-logo.svg" alt="NEERC / ICPC">
+      <div class="landing-header-actions">
+      <details class="login-access" ${error ? "open" : ""}>
+        <summary class="login-trigger">${icon("lock")} Войти</summary>
+        <form id="login-form" class="login-form form-stack">
+          <h1>Вход</h1>
+          <label class="field">Логин <input name="login" autocomplete="username" required></label>
+          <label class="field">Пароль <input name="password" type="password" autocomplete="current-password" required></label>
+          ${error ? `<div class="inline-error" role="alert">${esc(error)}</div>` : ""}
+          <button class="button primary" type="submit">Войти ${icon("arrow")}</button>
+        </form>
+      </details>
+      <button class="landing-menu-trigger" type="button" aria-haspopup="dialog" aria-label="Открыть меню" aria-controls="landing-menu" aria-expanded="false">${icon("menu")}</button>
+      </div>
+    </header>
+    ${landingContent()}
+    ${landingMenu()}
+  </main>`;
+  const hero = $("#landing-hero");
+  bindPortraitScene(hero);
+  const unbindField = bindHeroField(hero);
+  const unbindContent = bindLandingContent($(".login-page"));
+  disposeLanding = () => { unbindField(); unbindContent(); };
+  const access = $(".login-access");
+  access.addEventListener("toggle", () => {
+    if (access.open) $("#login-form [name=login]").focus({preventScroll: true});
+  });
+  access.addEventListener("keydown", event => {
+    if (event.key === "Escape" && access.open) {
+      access.open = false;
+      $(".login-trigger", access).focus();
+    }
+  });
 }
+
+function setMenu(requested, restoreFocus=false) {
+ const sidebar=$('#sidebar');if(!sidebar)return;
+ const open=mobileViewport.matches&&requested;
+ const trigger=$('.mobile-menu');
+ sidebar.classList.toggle('open',open);
+ sidebar.inert=mobileViewport.matches&&!open;
+ $('.main').inert=open;
+ $('.menu-scrim').hidden=!open;
+ trigger.setAttribute('aria-expanded',String(open));
+ if(open)$('.drawer-close').focus();
+ else if(restoreFocus)trigger.focus();
+}
+function renderNavigation(user) {
+  const all = { scope: "all", hallId: "", tagId: "" };
+  return `<nav aria-label="Разделы приложения">
+    <div class="nav-label">Задачи</div>
+    ${user.homeHallId ? navButton("tasks", "Мой холл", "hall", {...all, scope: "home"}) : ""}
+    ${navButton("tasks", "Все задачи", "grid", all)}
+    ${navButton("tasks", "Мои задачи", "check", {...all, scope: "mine"})}
+    ${canManage() ? navButton("volunteers", "Мои волонтёры", "users") : ""}
+    <div class="nav-label">Вопросы и ответы</div>
+    ${navButton("questions", "Входящие", "inbox", {box: "incoming"})}
+    ${navButton("questions", "Исходящие", "send", {box: "outgoing"})}
+    ${canManage() ? navButton("questions", "От волонтёров", "message", {box: "volunteer"}) : ""}
+    ${navButton("questions", "Без тегов", "message", {box: "unaddressed"})}
+    <div class="nav-label">Холлы</div>
+    ${hallTags().map(tag => navButton("tasks", tag.name, "hall", {...all, scope: "hall", hallId: tag.id})).join("")}
+    <div class="nav-label">Направления</div>
+    ${directionTags().map(tag => navButton("tasks", tag.name, "tag", {...all, tagId: tag.id})).join("")}
+    ${canManage() ? `<div class="nav-label">Управление</div>${navButton("deliveries", "Доставка в Telegram", "send")}` : ""}
+    ${hasRole("admin") ? navButton("admin", "Администрирование", "settings") : ""}
+  </nav>`;
+}
+
 function renderShell() {
- const user=me();
- $('#app').innerHTML=`<div class="app-shell"><aside class="sidebar" id="sidebar"><div class="brand"><span class="brand-mark">${icon('bolt')}</span><div><strong>ШТАБ</strong><small>КООРДИНАЦИЯ МЕРОПРИЯТИЯ</small></div></div><div class="nav-label">Рабочее пространство</div>${user.homeHallId?navButton('tasks','Мой холл','hall',{scope:'home',hallId:'',tagId:''}):''}${navButton('tasks','Все задачи','grid',{scope:'all',hallId:'',tagId:''})}${navButton('tasks','Мои задачи','check',{scope:'mine',hallId:'',tagId:''})}${canManage()?navButton('volunteers','Мои волонтёры','users'):''}<div class="nav-label">Вопросы и ответы</div>${navButton('questions','Входящие','inbox',{box:'incoming'})}${navButton('questions','Исходящие','send',{box:'outgoing'})}${canManage()?navButton('questions','От волонтёров','message',{box:'volunteer'}):''}${navButton('questions','Без тегов','message',{box:'unaddressed'})}<div class="nav-label">Холлы</div>${hallTags().map(tag=>navButton('tasks',tag.name,'hall',{scope:'hall',hallId:tag.id,tagId:''})).join('')}<div class="nav-label">Направления</div>${directionTags().map(tag=>navButton('tasks',tag.name,'tag',{scope:'all',tagId:tag.id,hallId:''})).join('')}${canManage()?`<div class="nav-label">Управление</div>${navButton('deliveries','Доставка в Telegram','send')}`:''}${hasRole('admin')?navButton('admin','Администрирование','settings'):''}<div class="sidebar-footer"><div class="connection" id="connection">Изменения синхронизируются</div></div></aside><main class="main"><header class="topbar"><button class="icon-button mobile-menu" data-action="menu" aria-label="Открыть навигацию">${icon('menu')}</button><div class="breadcrumb">Мероприятие <span>/</span> <strong id="breadcrumb-title">${esc(titleForView())}</strong></div><div class="top-right"><button class="icon-button" data-nav="notifications" aria-label="Уведомления">${icon('bell')}</button><button class="profile" data-nav="account"><span class="avatar">${esc(initials(user.name))}</span><span><span class="profile-name">${esc(user.name)}</span><span class="profile-role">${esc((user.roles || []).map(role=>roleNames[role]).join(' · '))}</span></span></button><button class="icon-button" data-action="logout" aria-label="Выйти">${icon('logout')}</button></div></header><div id="page" class="page"></div></main></div>`;
- renderPage();
+  if (disposeLanding) {
+    disposeLanding();
+    disposeLanding = null;
+    window.scrollTo({top: 0, behavior: "instant"});
+  }
+  const user = me();
+  const roles = (user.roles || []).map(role => roleNames[role]).join(" · ");
+  $("#app").innerHTML = `<div class="app-shell">
+    <div class="menu-scrim" data-action="dismiss-menu" hidden></div>
+    <aside class="sidebar" id="sidebar">
+      <button class="icon-button drawer-close" type="button" data-action="dismiss-menu"
+        aria-label="Закрыть навигацию">${icon("close")}</button>
+      ${brand}
+      ${renderNavigation(user)}
+      <div class="sidebar-footer"><div class="connection" id="connection">Синхронизация работает</div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar ${state.view === "tasks" ? "topbar--board" : ""}">
+        <button class="icon-button mobile-menu" data-action="menu" aria-label="Открыть навигацию"
+          aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button>
+        ${state.view === "tasks"
+          ? `<h1 class="board-title" tabindex="-1">${esc(titleForView())}</h1>`
+          : `<div class="breadcrumb">NEERC / ICPC <span aria-hidden="true">·</span> <strong id="breadcrumb-title"></strong></div>`}
+        <div class="top-right">
+          <button class="icon-button" data-nav="notifications" aria-label="Уведомления" id="notification-button">${icon("bell")}</button>
+          <button class="profile" data-nav="account" aria-label="Мой профиль">
+            <span class="avatar">${esc(initials(user.name))}</span>
+            <span><span class="profile-name">${esc(user.name)}</span><span class="profile-role">${esc(roles)}</span></span>
+          </button>
+          <button class="icon-button" data-action="logout" aria-label="Выйти">${icon("logout")}</button>
+        </div>
+      </header>
+      <div id="page" class="page"></div>
+    </main>
+  </div>`;
+  setMenu(false);
+  renderPage();
 }
+
 function renderPage() {
- $('#breadcrumb-title').textContent=titleForView();
- const subtitles={tasks:state.scope==='home'?'Основная рабочая очередь вашего холла':state.scope==='hall'?'Отдельная очередь холла · назначения и выполнение независимы':state.scope==='mine'?'Задачи, которые вы создали, взяли в работу или передали волонтёрам':'Общая очередь организаторов и волонтёров мероприятия',questions:'Один вопрос — одно обсуждение. Ответы сохраняются в общей истории.',volunteers:'Доступность, текущие задачи и личные теги вашего пула',admin:'Участники, направления, пулы и права доступа',deliveries:'Контроль отправки заданий и обновлений сообщений',account:'Доступ к рабочему пространству',notifications:'События, которым нужно ваше внимание'};
- $('#page').innerHTML=`<div class="page-heading"><div><div class="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</div><h1>${esc(titleForView())}</h1><p>${esc(subtitles[state.view] || '')}</p></div>${state.view==='tasks'?`<button class="button primary" data-action="create-task">${icon('plus')}<span class="button-label">Создать задачу</span></button>`:''}</div><div id="page-content"></div>`;
+ const breadcrumb = $('#breadcrumb-title');
+ if (breadcrumb) breadcrumb.textContent = titleForView();
+ const subtitles={questions:'Один вопрос — одно обсуждение. Ответы сохраняются в общей истории.',volunteers:'Доступность, текущие задачи и личные теги вашего пула',admin:'Участники, направления, пулы и права доступа',deliveries:'Контроль отправки заданий и обновлений сообщений',account:'Доступ к рабочему пространству',notifications:'События, которым нужно ваше внимание'};
+ const title = esc(titleForView());
+ const subtitle = esc(subtitles[state.view] || "");
+ const heading = state.view === "tasks" ? ""
+   : `<div class="page-heading"><div><h1 tabindex="-1">${title}</h1><p>${subtitle}</p></div></div>`;
+ $("#page").innerHTML = `${heading}<div id="page-content"></div>`;
+
  if(state.view==='tasks')renderTasksPage();
  else if(state.view==='questions')$('#page-content').innerHTML='<div id="questions-results" class="questions-list"><div class="loading-line">Загружаем вопросы…</div></div>';
  else if(state.view==='volunteers')$('#page-content').innerHTML='<div id="volunteers-results" class="volunteer-grid"><div class="loading-line">Загружаем волонтёров…</div></div>';
@@ -99,28 +192,110 @@ function renderPage() {
  else if(state.view==='account')renderAccount();
  else if(state.view==='notifications')renderNotifications();
  else if(state.view==='deliveries')$('#page-content').innerHTML='<div id="deliveries-results" class="panel"><div class="loading-line">Загружаем доставки…</div></div>';
- loadCurrent().catch(error=>toast(error.message,true));
+ loadCurrent().catch(error=>{
+  const loading=$('#page-content .loading-line');
+  if(loading)loading.outerHTML='<div class="empty load-error"><h3>Не удалось загрузить данные</h3><button type="button" class="button secondary" data-action="reload-view">Повторить</button></div>';
+  toast(error.message,true);
+ });
 }
+const boardColumns = [
+  {status: "queued", label: "В очереди"},
+  {status: "in_progress", label: "В работе"},
+  {status: "done", label: "Выполнено"},
+  {status: "cancelled", label: "Отменено"},
+];
+
 function renderTasksPage() {
- const otherHall=state.scope==='hall' && me().homeHallId && Number(state.hallId)!==Number(me().homeHallId);
- $('#page-content').innerHTML=`${state.boot.telegram?.configured===false?'<div class="notice warning">Telegram-бот пока не настроен. Назначения сохраняются; для доставки администратору нужно указать токен и имя нового бота в настройках сервера.</div>':''}${otherHall?`<div class="notice ${state.boot.settings.crossHall?'':'warning'}">${state.boot.settings.crossHall?'Открыты задачи другого холла. Можно брать их в работу и назначать волонтёров из своего пула.':'Открыты задачи другого холла. Сейчас доступен просмотр; работу с другими холлами может разрешить администратор.'}</div>`:''}<div id="task-stats" class="stats"></div><section class="panel"><div class="panel-header"><h2>Очередь задач <span class="muted" id="task-count"></span></h2><small id="sync-label">Обновление каждые 4 секунды</small></div><form id="task-filters" class="filters"><label class="search">${icon('search')}<input name="q" value="${esc(state.filters.q)}" placeholder="Поиск по названию и описанию" aria-label="Поиск задач"></label><select name="status" aria-label="Статус"><option value="">Все статусы</option>${Object.entries(statusNames).map(([key,name])=>`<option value="${key}" ${state.filters.status===key?'selected':''}>${name}</option>`).join('')}</select><select name="assignment" aria-label="Назначения"><option value="">Все назначения</option><option value="free" ${state.filters.assignment==='free'?'selected':''}>Без назначений</option><option value="assigned" ${state.filters.assignment==='assigned'?'selected':''}>С назначениями</option><option value="waiting" ${state.filters.assignment==='waiting'?'selected':''}>Ожидают принятия</option></select><span class="filter-advanced"><label class="toggle-filter"><input type="checkbox" name="blocked" ${state.filters.blocked?'checked':''}>Заблокированы</label><label class="toggle-filter"><input type="checkbox" name="openQuestions" ${state.filters.openQuestions?'checked':''}>Есть вопросы</label></span></form><div id="tasks-results"></div><div class="table-note"><span>Назначение волонтёрам ещё не означает начало выполнения</span><span>Единая очередь · веб + Telegram</span></div></section>`;
- renderTaskResults();
+  const otherHall = state.scope === "hall" && me().homeHallId && Number(state.hallId) !== Number(me().homeHallId);
+  const readOnly = otherHall && !state.boot.settings.crossHall && !hasRole("admin");
+  const filters = state.filters;
+  const assignments = {free: "Без назначений", assigned: "С назначениями", waiting: "Ожидают принятия"};
+  const options = (values, selected) => Object.entries(values).map(([value, label]) =>
+    `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`
+  ).join("");
+  $("#page-content").innerHTML = `
+    <div class="board-tools">
+      <form id="task-filters" class="filters">
+        <label class="search">${icon("search")}
+          <input type="search" name="q" value="${esc(filters.q)}" placeholder="Поиск по описанию или номеру" aria-label="Поиск задач">
+        </label>
+        <select name="status" aria-label="Статус">
+          <option value="">Все статусы</option>${options(statusNames, filters.status)}
+        </select>
+        <select name="assignment" aria-label="Назначения">
+          <option value="">Все назначения</option>${options(assignments, filters.assignment)}
+        </select>
+        <div class="filter-advanced">
+          <label class="toggle-filter"><input type="checkbox" name="blocked" ${filters.blocked ? "checked" : ""}>Заблокированы</label>
+          <label class="toggle-filter"><input type="checkbox" name="openQuestions" ${filters.openQuestions ? "checked" : ""}>Есть вопросы</label>
+        </div>
+      </form>
+      <button class="button primary" data-action="create-task">${icon("plus")} Создать задачу</button>
+    </div>
+    ${readOnly ? `<div class="notice warning">Задачи этого холла доступны для просмотра.</div>` : ""}
+    <div class="board-summary">
+      <span id="task-count"></span>
+      ${state.boot.telegram?.configured === false ? '<small>Telegram не настроен</small>' : ""}
+      <button class="muted-link" type="button" data-action="clear-filters" id="clear-task-filters" hidden>Сбросить фильтры</button>
+      <small id="sync-label" class="sync-label">Синхронизация</small>
+    </div>
+    <div id="tasks-results"><div class="loading-line" role="status">Загружаем задачи…</div></div>`;
 }
-function taskParticipants(task) {
- if(task.claimedBy)return `<div class="people">${userAvatar(task.claimedBy)}<span>${esc(userName(task.claimedBy))}</span></div>`;
- const volunteers=(task.assignments || []).map(assignment=>assignment.volunteerId ?? assignment.userId);
- if(!volunteers.length)return '<span class="free-label">Нет назначений</span>';
- return `<div class="people"><span class="avatar-stack">${volunteers.slice(0,3).map(userAvatar).join('')}</span><span>${volunteers.length===1?esc(userName(volunteers[0])):`${volunteers.length} ${volunteers.length<5?'волонтёра':'волонтёров'}`}</span></div>`;
+
+const taskDescription = task => task.description?.trim() || task.title?.trim() || "Описание отсутствует";
+
+function taskAssignees(task) {
+  const volunteerIds = (task.assignments || []).map(assignment => assignment.volunteerId);
+  const people = task.claimedBy ? [task.claimedBy] : volunteerIds;
+  if (people.length === 0) return "";
+  const names = people.map(userName).join(", ");
+  return `<span class="avatar-stack" title="${esc(names)}" aria-label="${esc(names)}">
+    ${people.slice(0, 3).map(userAvatar).join("")}
+    ${people.length > 3 ? `<span class="avatar">+${people.length - 3}</span>` : ""}
+  </span>`;
 }
+
+function renderTaskCard(task) {
+  const code = `#${String(task.id).padStart(3, "0")}`;
+  return `<li>
+    <button class="board-card${task.blocked ? " board-card--blocked" : ""}" data-open-task="${Number(task.id)}" type="button">
+      <span class="board-card-description">${esc(taskDescription(task))}</span>
+      <span class="tag-list">
+        ${tagList(task.tagIds?.length ? task.tagIds : task.hallId ? [task.hallId] : [])}
+        ${task.blocked ? '<span class="status blocked">Заблокирована</span>' : ""}
+        ${task.awaitingAcceptance ? '<span class="status waiting">Ожидает принятия</span>' : ""}
+      </span>
+      <span class="board-card-meta">
+        <span class="task-code">${code}</span>
+        ${task.openQuestions ? `<span class="board-card-questions" aria-label="Открытых вопросов: ${Number(task.openQuestions)}">${icon("message")} ${Number(task.openQuestions)}</span>` : ""}
+        ${taskAssignees(task)}
+      </span>
+    </button>
+  </li>`;
+}
+
 function renderTaskResults() {
- if(!$('#tasks-results'))return;
- const tasks=state.tasks;
- $('#task-count').textContent=`· ${tasks.length}`;
- const stat=(label,count,ico,color,hint)=>`<div class="stat"><div class="stat-label">${esc(label)}</div><div class="stat-number">${count}</div><div class="stat-hint">${esc(hint)}</div><div class="stat-icon ${color}">${icon(ico)}</div></div>`;
- $('#task-stats').innerHTML=stat('В очереди',tasks.filter(task=>task.status==='queued').length,'list','amber','Ожидают начала работы')+stat('В процессе',tasks.filter(task=>task.status==='in_progress').length,'clock','','Выполняются прямо сейчас')+stat('Требуют внимания',tasks.filter(task=>task.blocked).length,'alert','red','Есть блокирующие вопросы')+stat('Выполнено',tasks.filter(task=>task.status==='done').length,'check','green','Работа завершена');
- if(!tasks.length){$('#tasks-results').innerHTML=empty('В этой очереди пока нет задач','Создайте первую задачу или измените фильтры. Новые назначения появятся здесь автоматически.');return;}
- $('#tasks-results').innerHTML=`<div class="overflow-table"><table class="task-table"><thead><tr><th>Задача</th><th class="hall-column">Направление</th><th>Участники</th><th>Статус</th><th class="created-column">Обновление</th></tr></thead><tbody>${tasks.map(task=>`<tr class="${task.blocked?'blocked-row':''}" data-open-task="${Number(task.id)}"><td><div class="task-code">#${String(task.id).padStart(3,'0')}</div><button class="task-title task-title-button" data-open-task="${Number(task.id)}">${esc(task.title)}</button><div class="task-subtitle">${task.hallId?`<span>${esc(tagName(task.hallId))}</span>`:''}${task.openQuestions?`<span>· ${typeof task.openQuestions==='number'?task.openQuestions:''} открытых вопросов</span>`:''}</div></td><td class="hall-column"><div class="tag-list">${tagList(task.tagIds?.length?task.tagIds:task.hallId?[task.hallId]:[]) || '<span class="muted">Без тегов</span>'}</div></td><td class="people-column">${taskParticipants(task)}</td><td class="status-column"><div class="status-stack">${task.blocked?'<span class="status blocked">Заблокирована</span>':''}${statusBadge(task)}${task.awaitingAcceptance?'<span class="status waiting">Ожидает принятия</span>':''}</div></td><td class="created-column"><small>${esc(dateText(task.updatedAt || task.createdAt))}</small></td></tr>`).join('')}</tbody></table></div>`;
+  const results = $("#tasks-results");
+  if (!results) return;
+  const tasks = state.tasks;
+  $("#task-count").textContent = `Задач: ${tasks.length}`;
+  $("#clear-task-filters").hidden = !Object.values(state.filters).some(Boolean);
+  const columns = boardColumns.filter(column => !state.filters.status || column.status === state.filters.status);
+  results.innerHTML = `<div class="task-board">
+    ${columns.map(({status, label}) => {
+      const cards = tasks.filter(task => task.status === status);
+      return `<section class="board-column" data-status="${status}" aria-labelledby="board-${status}">
+        <header class="board-column-header">
+          <h2 id="board-${status}">${label}</h2>
+          <span class="board-count" aria-label="Задач: ${cards.length}">${cards.length}</span>
+        </header>
+        ${cards.length ? `<ul class="board-cards">${cards.map(renderTaskCard).join("")}</ul>`
+          : '<p class="board-empty">Нет задач</p>'}
+      </section>`;
+    }).join("")}
+  </div>`;
 }
+
 async function loadCurrent() {
  if(!state.boot)return;
  if(state.view==='tasks'){
@@ -131,7 +306,13 @@ async function loadCurrent() {
   const revision=state.taskLoadRevision=(state.taskLoadRevision||0)+1;
   const result=await api(`/api/tasks?${params}`);
   if(revision!==state.taskLoadRevision || viewKey!==`${state.view}:${state.scope}:${state.hallId}:${state.tagId}`)return;
-  state.tasks=listFrom(result,'tasks');renderTaskResults();
+  const tasks=listFrom(result,'tasks');
+  const signature = JSON.stringify([state.filters, tasks]);
+  if (signature === state.taskRenderSignature && $("#tasks-results .task-board")) return;
+  state.taskRenderSignature = signature;
+  const focus=document.activeElement?.closest('.board-card')?.dataset.openTask;
+  state.tasks=tasks;renderTaskResults();
+  if(focus)$(`.board-card[data-open-task="${CSS.escape(focus)}"]`)?.focus({preventScroll:true});
  } else if(state.view==='questions'){
   const box=state.box;const result=await api(`/api/questions?box=${encodeURIComponent(box)}`);if(state.view!=='questions'||state.box!==box)return;
   state.questions=listFrom(result,'questions');if(!hasQuestionDraft($('#page-content')) && (!$('#page-content')?.contains(document.activeElement) || !document.activeElement.matches('input,textarea,select')))renderQuestionResults();
@@ -142,7 +323,8 @@ async function loadCurrent() {
  }
 }
 function navigate(view, options={}) {
- state.view=view;Object.assign(state,options);$('#sidebar')?.classList.remove('open');renderShell();
+ state.view=view;Object.assign(state,options);renderShell();
+ $('.main h1')?.focus();
 }
 function showModal(type,html) {
  const modal=$('#modal');state.modalType=type;modal.className='modal';modal.innerHTML=html;if(!modal.open)modal.showModal();
@@ -152,7 +334,7 @@ const modalHead=(title,subtitle='')=>`<div class="modal-head"><div><h2>${esc(tit
 function checkTags(name,selected=[],tags=state.boot.tags){return tags.map(tag=>`<label class="check-pill"><input type="checkbox" name="${name}" value="${Number(tag.id)}" ${ids(selected).includes(Number(tag.id))?'checked':''}>${esc(tag.name)}</label>`).join('');}
 function selectedValues(form,name){return $$(`[name="${name}"]:checked`,form).map(input=>Number(input.value));}
 function showCreateTask() {
- showModal('create-task',`${modalHead('Новая задача','Опишите результат и выберите, где нужно выполнить задачу')}<form id="create-task-form" class="modal-body form-stack"><label class="field">Название задачи<input name="title" required maxlength="250" placeholder="Что нужно сделать?"></label><label class="field">Описание<textarea name="description" rows="4" maxlength="15000" placeholder="Место, время и подробности, которые помогут исполнителям"></textarea></label><div class="field-group"><label class="field">Холлы<small>Для каждого выбранного холла создаётся отдельное выполнение со своим статусом.</small></label><label class="check-line" style="margin-bottom:12px"><input name="allHalls" type="checkbox">Все холлы</label><div class="check-grid">${checkTags('hallIds',[],hallTags())}</div></div><div class="field"><span>Общие теги направлений</span><div class="check-grid">${checkTags('tagIds',[],directionTags())}</div><small>Без тегов задача попадёт в общую очередь.</small></div><div class="modal-footer"><button type="button" class="button secondary" data-action="close-modal">Отмена</button><button class="button primary" type="submit">${icon('plus')}Опубликовать задачу</button></div></form>`);
+ showModal('create-task',`${modalHead('Новая задача','Опишите результат и выберите, где нужно выполнить задачу')}<form id="create-task-form" class="modal-body form-stack"><label class="field">Описание<textarea name="description" rows="5" required maxlength="15000" placeholder="Место, время и подробности, которые помогут исполнителям"></textarea></label><div class="field-group"><label class="field">Холлы<small>Для каждого выбранного холла создаётся отдельное выполнение со своим статусом.</small></label><label class="check-line" style="margin-bottom:12px"><input name="allHalls" type="checkbox">Все холлы</label><div class="check-grid">${checkTags('hallIds',[],hallTags())}</div></div><div class="field"><span>Общие теги направлений</span><div class="check-grid">${checkTags('tagIds',[],directionTags())}</div><small>Без тегов задача попадёт в общую очередь.</small></div><div class="modal-footer"><button type="button" class="button secondary" data-action="close-modal">Отмена</button><button class="button primary" type="submit">${icon('plus')}Опубликовать задачу</button></div></form>`);
 }
 async function openTask(id) {
  state.detailId=Number(id);state.modalType='task';showModal('task',`${modalHead('Загружаем задачу…')}<div class="loading-line">Получаем актуальные данные</div>`);
@@ -175,7 +357,7 @@ function renderTaskDetail() {
  const history=task.history || [];
  const questions=task.questions || [];
  const canQuestion=isParticipant(task);
- showModal('task',`${modalHead(task.title,`Задача #${task.id}${task.hallId?' · '+tagName(task.hallId):' · Общая очередь'}`)}<div class="modal-body"><div class="tag-list">${task.blocked?'<span class="status blocked">Заблокирована</span>':''}${statusBadge(task)}${task.awaitingAcceptance?'<span class="status waiting">Ожидает принятия волонтёрами</span>':''}${tagList(task.tagIds)}</div><div class="detail-description">${esc(task.description || 'Описание не добавлено.')}</div><div class="detail-meta"><div><small>Автор задачи</small>${esc(userName(task.authorId))}</div><div><small>Создана</small>${esc(dateText(task.createdAt))}</div><div><small>${task.claimedBy?'Взял в работу':'Назначил волонтёров'}</small>${esc(userName(task.claimedBy || task.assignedBy))}</div><div><small>Выполнение</small>${task.hallId?esc(tagName(task.hallId)):'Общая задача'}</div></div>${!working&&!isTerminal(task)?`<div class="notice warning">Работа с задачами этого холла отключена администратором. Доступен просмотр.</div>`:''}<div class="actions">${free&&working?`<button class="button primary" data-task-action="claim" data-id="${task.id}">${icon('check')}Взять в работу</button>${canManage()?`<button class="button secondary" data-action="assign" data-id="${task.id}">${icon('users')}Назначить волонтёров</button>`:''}`:''}${canFinish?`<button class="button primary" data-task-action="complete" data-id="${task.id}">${icon('check')}Завершить задачу</button>`:''}${(task.canReset ?? (!isTerminal(task)&&isParticipant(task)&&working))?`<button class="button secondary" data-action="reset-task" data-id="${task.id}">${icon('refresh')}Вернуть в очередь</button><button class="button danger" data-action="cancel-task" data-id="${task.id}">Отменить</button>`:''}</div>${siblings.length>1?`<div class="section-label">Выполнение по холлам</div><div class="siblings">${siblings.map(sibling=>`<button class="sibling ${Number(sibling.id)===Number(task.id)?'current':''}" data-open-task="${sibling.id}"><span>${esc(sibling.hallId?tagName(sibling.hallId):'Общая')}</span>${statusBadge(sibling)}${sibling.blocked?icon('alert'):''}</button>`).join('')}</div>`:''}<div class="section-label">Назначенные волонтёры · ${participants.length}</div>${participants.length?participants.map(assignment=>`<div class="select-person" style="cursor:default">${userAvatar(assignment.volunteerId)}<div class="person-info"><strong>${esc(userName(assignment.volunteerId))}</strong><p>${assignment.acceptedAt?'Начал выполнение · '+esc(dateText(assignment.acceptedAt)):isTerminal(task)?'Задача завершена':'Задание назначено, ожидается принятие'}</p></div>${assignment.acceptedAt?'<span class="status in_progress">В работе</span>':''}</div>`).join(''):'<p class="muted" style="font-size:12px">Волонтёры не назначены.</p>'}<div class="section-label">Вопросы по задаче · ${questions.length}</div>${questions.length?questions.map(renderDiscussion).join(''):'<p class="muted" style="font-size:12px">Вопросов пока нет.</p>'}${canQuestion&&!isTerminal(task)?`<details class="question-form"><summary>+ Задать вопрос по задаче</summary><form id="new-question-form" class="form-stack" data-task-id="${task.id}"><label class="field">Вопрос<textarea name="body" required maxlength="10000" placeholder="Что нужно уточнить?"></textarea></label><div class="field"><span>Получатели</span><div class="check-grid">${checkTags('tagIds')}</div><small>Рекомендуем выбрать направления. Без тегов вопрос попадёт в общую очередь вопросов.</small></div><div class="form-row"><label class="check-line"><input type="checkbox" name="blocking">Блокирует выполнение</label><label class="field">Срочность<select name="urgency"><option value="normal">Обычная</option><option value="urgent">Срочная</option></select></label></div><div class="modal-footer"><button class="button primary" type="submit">${icon('send')}Отправить вопрос</button></div></form></details>`:''}<div class="section-label">История изменений</div>${history.length?`<ol class="history">${history.slice().reverse().map(entry=>`<li>${esc(eventNames[entry.event || entry.action] || entry.event || entry.action || 'Изменение задачи')}${entry.actorId?` · ${esc(userName(entry.actorId))}`:''}${historyDetail(entry)}<small>${esc(dateText(entry.createdAt))}</small></li>`).join('')}</ol>`:'<p class="muted" style="font-size:12px">История пока пуста.</p>'}</div>`);
+ showModal('task',`${modalHead("Задача #" + task.id,task.hallId ? tagName(task.hallId) : "Общая очередь")}<div class="modal-body"><div class="tag-list">${task.blocked?'<span class="status blocked">Заблокирована</span>':''}${statusBadge(task)}${task.awaitingAcceptance?'<span class="status waiting">Ожидает принятия волонтёрами</span>':''}${tagList(task.tagIds)}</div><div class="detail-description">${esc(taskDescription(task))}</div><div class="detail-meta"><div><small>Автор задачи</small>${esc(userName(task.authorId))}</div><div><small>Создана</small>${esc(dateText(task.createdAt))}</div><div><small>${task.claimedBy?'Взял в работу':'Назначил волонтёров'}</small>${esc(userName(task.claimedBy || task.assignedBy))}</div><div><small>Выполнение</small>${task.hallId?esc(tagName(task.hallId)):'Общая задача'}</div></div>${!working&&!isTerminal(task)?`<div class="notice warning">Работа с задачами этого холла отключена администратором. Доступен просмотр.</div>`:''}<div class="actions">${free&&working?`<button class="button primary" data-task-action="claim" data-id="${task.id}">${icon('check')}Взять в работу</button>${canManage()?`<button class="button secondary" data-action="assign" data-id="${task.id}">${icon('users')}Назначить волонтёров</button>`:''}`:''}${canFinish?`<button class="button primary" data-task-action="complete" data-id="${task.id}">${icon('check')}Завершить задачу</button>`:''}${(task.canReset ?? (!isTerminal(task)&&isParticipant(task)&&working))?`<button class="button secondary" data-action="reset-task" data-id="${task.id}">${icon('refresh')}Вернуть в очередь</button><button class="button danger" data-action="cancel-task" data-id="${task.id}">Отменить</button>`:''}</div>${siblings.length>1?`<div class="section-label">Выполнение по холлам</div><div class="siblings">${siblings.map(sibling=>`<button class="sibling ${Number(sibling.id)===Number(task.id)?'current':''}" data-open-task="${sibling.id}"><span>${esc(sibling.hallId?tagName(sibling.hallId):'Общая')}</span>${statusBadge(sibling)}${sibling.blocked?icon('alert'):''}</button>`).join('')}</div>`:''}<div class="section-label">Назначенные волонтёры · ${participants.length}</div>${participants.length?participants.map(assignment=>`<div class="select-person" style="cursor:default">${userAvatar(assignment.volunteerId)}<div class="person-info"><strong>${esc(userName(assignment.volunteerId))}</strong><p>${assignment.acceptedAt?'Начал выполнение · '+esc(dateText(assignment.acceptedAt)):isTerminal(task)?'Задача завершена':'Задание назначено, ожидается принятие'}</p></div>${assignment.acceptedAt?'<span class="status in_progress">В работе</span>':''}</div>`).join(''):'<p class="muted" style="font-size:12px">Волонтёры не назначены.</p>'}<div class="section-label">Вопросы по задаче · ${questions.length}</div>${questions.length?questions.map(renderDiscussion).join(''):'<p class="muted" style="font-size:12px">Вопросов пока нет.</p>'}${canQuestion&&!isTerminal(task)?`<details class="question-form"><summary>+ Задать вопрос по задаче</summary><form id="new-question-form" class="form-stack" data-task-id="${task.id}"><label class="field">Вопрос<textarea name="body" required maxlength="10000" placeholder="Что нужно уточнить?"></textarea></label><div class="field"><span>Получатели</span><div class="check-grid">${checkTags('tagIds')}</div><small>Рекомендуем выбрать направления. Без тегов вопрос попадёт в общую очередь вопросов.</small></div><div class="form-row"><label class="check-line"><input type="checkbox" name="blocking">Блокирует выполнение</label><label class="field">Срочность<select name="urgency"><option value="normal">Обычная</option><option value="urgent">Срочная</option></select></label></div><div class="modal-footer"><button class="button primary" type="submit">${icon('send')}Отправить вопрос</button></div></form></details>`:''}<div class="section-label">История изменений</div>${history.length?`<ol class="history">${history.slice().reverse().map(entry=>`<li>${esc(eventNames[entry.event || entry.action] || entry.event || entry.action || 'Изменение задачи')}${entry.actorId?` · ${esc(userName(entry.actorId))}`:''}${historyDetail(entry)}<small>${esc(dateText(entry.createdAt))}</small></li>`).join('')}</ol>`:'<p class="muted" style="font-size:12px">История пока пуста.</p>'}</div>`);
 }
 function questionCanReply(question){return question.state!=='closed';}
 function renderDiscussion(question) {
@@ -195,7 +377,7 @@ function renderVolunteers() {
  const target=$('#volunteers-results');if(!target)return;
  target.innerHTML=state.volunteers.length?state.volunteers.map(volunteer=>{
   const tasks=volunteerTaskList(volunteer);const free=volunteer.available!==false&&volunteer.available!==0&&!tasks.length;
-  return `<article class="volunteer-card"><div class="volunteer-heading"><span class="avatar">${esc(initials(volunteer.name))}</span><div><h3>${esc(volunteer.name)}</h3><div class="availability ${!volunteer.available?'unavailable':''}">${!volunteer.available?'Недоступен':free?'Свободен':'Доступен · занят'}</div></div></div><div class="tag-list">${personalNames(volunteer).map(name=>`<span class="tag">${esc(name)}</span>`).join('') || '<small>Нет личных тегов</small>'}</div><div class="volunteer-tasks">${tasks.length?tasks.map(task=>`<button data-open-task="${task.id}">#${task.id} ${esc(task.title)}${task.status==='queued'?' · ожидает принятия':''}</button>`).join(''):'Нет незавершённых задач'}</div><div><small>${volunteer.telegramId?'Telegram подключён':'Telegram ещё не подключён'}</small></div><div class="volunteer-actions">${Number(volunteer.managerId)===Number(me().id)?`<button class="button ghost small" data-action="personal-tags" data-id="${volunteer.id}">${icon('tag')}Личные теги</button>`:''}<button class="button secondary small" data-action="connect-volunteer" data-id="${volunteer.id}" ${volunteer.telegramId?'disabled':''}>${icon('send')}${volunteer.telegramId?'Telegram подключён':'Подключить Telegram'}</button></div></article>`;
+  return `<article class="volunteer-card"><div class="volunteer-heading"><span class="avatar">${esc(initials(volunteer.name))}</span><div><h3>${esc(volunteer.name)}</h3><div class="availability ${!volunteer.available?'unavailable':''}">${!volunteer.available?'Недоступен':free?'Свободен':'Доступен · занят'}</div></div></div><div class="tag-list">${personalNames(volunteer).map(name=>`<span class="tag">${esc(name)}</span>`).join('') || '<small>Нет личных тегов</small>'}</div><div class="volunteer-tasks">${tasks.length?tasks.map(task=>`<button data-open-task="${task.id}">#${task.id} ${esc(taskDescription(task))}${task.status==='queued'?' · ожидает принятия':''}</button>`).join(''):'Нет незавершённых задач'}</div><div><small>${volunteer.telegramId?'Telegram подключён':'Telegram ещё не подключён'}</small></div><div class="volunteer-actions">${Number(volunteer.managerId)===Number(me().id)?`<button class="button ghost small" data-action="personal-tags" data-id="${volunteer.id}">${icon('tag')}Личные теги</button>`:''}<button class="button secondary small" data-action="connect-volunteer" data-id="${volunteer.id}" ${volunteer.telegramId?'disabled':''}>${icon('send')}${volunteer.telegramId?'Telegram подключён':'Подключить Telegram'}</button></div></article>`;
  }).join(''):empty('Пул пока не настроен','Администратор добавляет волонтёров и закрепляет их за менеджерами. После этого они появятся здесь.');
 }
 function renderDeliveries() {
@@ -216,7 +398,7 @@ function showTagForm(id) {
  showModal('edit-tag',`${modalHead(id?'Изменить общий тег':'Новый общий тег')}<form id="tag-form" data-tag-id="${id||''}" class="modal-body form-stack"><label class="field">Название<input name="name" value="${esc(tag.name)}" required maxlength="80"></label><label class="field">Тип<select name="kind" ${id?'disabled':''}><option value="direction" ${tag.kind==='direction'?'selected':''}>Направление</option><option value="hall" ${tag.kind==='hall'?'selected':''}>Холл</option></select><small>Холл создаёт отдельное выполнение задачи при публикации на несколько холлов.</small></label><div class="modal-footer"><button type="button" class="button secondary" data-action="close-modal">Отмена</button><button class="button primary" type="submit">Сохранить тег</button></div></form>`);
 }
 function renderAccount() {
- $('#page-content').innerHTML=`<section class="panel account-panel"><h2>Изменить пароль</h2><form id="password-form" class="form-stack" style="margin-top:22px"><label class="field">Текущий пароль<input type="password" name="currentPassword" required autocomplete="current-password"></label><label class="field">Новый пароль<input type="password" name="password" required minlength="12" autocomplete="new-password"><small>Не менее 12 символов.</small></label><button class="button primary" type="submit">Сохранить новый пароль</button></form><div class="admin-block"><button class="button secondary" data-action="logout">${icon('logout')}Выйти из штаба</button></div></section>`;
+ $('#page-content').innerHTML=`<section class="panel account-panel"><h2>Изменить пароль</h2><form id="password-form" class="form-stack" style="margin-top:22px"><label class="field">Текущий пароль<input type="password" name="currentPassword" required autocomplete="current-password"></label><label class="field">Новый пароль<input type="password" name="password" required minlength="12" autocomplete="new-password"><small>Не менее 12 символов.</small></label><button class="button primary" type="submit">Сохранить новый пароль</button></form><div class="admin-block"><button class="button secondary" data-action="logout">${icon('logout')}Выйти</button></div></section>`;
 }
 function renderNotifications() {
  const notifications=state.boot.notifications || [];
@@ -230,13 +412,13 @@ async function showAssignment(taskId) {
 }
 function renderVolunteerChoice(volunteer,preview=false) {
  const tasks=volunteerTaskList(volunteer);const free=volunteer.free ?? (volunteer.available&&!tasks.length);
- return `<label class="select-person">${preview?`<span class="avatar">${esc(initials(volunteer.name))}</span>`:`<input name="volunteerIds" type="checkbox" value="${volunteer.id}">`}<span class="person-info"><strong>${esc(volunteer.name)}</strong><p class="${!volunteer.available?'warning':''}">${!volunteer.available?'Недоступен':free?'Доступен · свободен':`Доступен · задач: ${tasks.length}`}${!volunteer.telegramId?' · Telegram не подключён':''}</p>${tasks.length?`<p>${tasks.map(task=>`#${task.id} ${esc(task.title)}${task.status==='queued'?' (ожидает принятия)':''}`).join('<br>')}</p>`:''}${personalNames(volunteer).length?`<p>${personalNames(volunteer).map(esc).join(' · ')}</p>`:''}</span></label>`;
+ return `<label class="select-person">${preview?`<span class="avatar">${esc(initials(volunteer.name))}</span>`:`<input name="volunteerIds" type="checkbox" value="${volunteer.id}">`}<span class="person-info"><strong>${esc(volunteer.name)}</strong><p class="${!volunteer.available?'warning':''}">${!volunteer.available?'Недоступен':free?'Доступен · свободен':`Доступен · задач: ${tasks.length}`}${!volunteer.telegramId?' · Telegram не подключён':''}</p>${tasks.length?`<p>${tasks.map(task=>`#${task.id} ${esc(taskDescription(task))}${task.status==='queued'?' (ожидает принятия)':''}`).join('<br>')}</p>`:''}${personalNames(volunteer).length?`<p>${personalNames(volunteer).map(esc).join(' · ')}</p>`:''}</span></label>`;
 }
 async function refreshAssignmentPreview() {
  const form=$('#assignment-form');if(!form)return;
  const revision=++state.previewRevision;$('#assign-submit').disabled=true;
  const result=await post('/api/volunteers/preview',{mode:form.elements.mode.value,volunteerIds:selectedValues(form,'volunteerIds'),personalTagIds:selectedValues(form,'personalTagIds')});
- if(state.modalType!=='assignment'||revision!==state.previewRevision)return;
+ if(state.modalType!=='assignment'||!form.isConnected||revision!==state.previewRevision)return;
  state.assignmentPreview=listFrom(result,'volunteers');$('#preview-count').textContent=state.assignmentPreview.length;
  $('#assignment-preview').innerHTML=state.assignmentPreview.length?state.assignmentPreview.map(volunteer=>renderVolunteerChoice(volunteer,true)).join(''):'<p class="field-hint">Никто не выбран. В режиме «Все свободные» недоступные и занятые волонтёры исключены.</p>';
  $('#assign-submit').disabled=!state.assignmentPreview.length;
@@ -275,7 +457,9 @@ async function connectVolunteer(id) {
  showModal('volunteer-link',`${modalHead('Подключение Telegram',userName(id))}<div class="modal-body form-stack"><div class="link-result">Передайте эту личную ссылку волонтёру. Он должен открыть её в своём Telegram и нажать «Старт».<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a><small>Ссылка одноразовая. Действует до ${esc(dateText(result.expiresAt))}.</small></div><p class="field-hint">До первого сообщения волонтёра бот не сможет отправлять ему личные задания. Ссылка привязывает именно его учётную запись к выбранному участнику.</p><div class="modal-footer"><button class="button secondary" data-action="copy-link" data-url="${esc(url)}">Скопировать ссылку</button><button class="button primary" data-action="close-modal">Готово</button></div></div>`);
 }
 async function refreshBootstrap() {
- const result=await api('/api/bootstrap');state.boot=result;
+ const csrf=state.boot?.csrf;
+ const result=await api('/api/bootstrap');
+ if(!csrf||state.boot?.csrf===csrf)state.boot=result;
 }
 async function refreshAfterAction(detailId=state.detailId) {
  await refreshBootstrap();await loadCurrent();
@@ -286,11 +470,11 @@ async function submitForm(form) {
  const data=new FormData(form);
  if(form.id==='login-form'){
   await post('/api/login',{login:data.get('login'),password:data.get('password')});await refreshBootstrap();
-  state.view='tasks';state.scope=me().homeHallId?'home':'all';state.hallId='';state.tagId='';renderShell();return;
+  state.view='tasks';state.scope=me().homeHallId?'home':'all';state.hallId='';state.tagId='';state.filters=initialFilters();renderShell();return;
  }
  if(form.id==='task-filters')return;
  if(form.id==='create-task-form'){
-  const result=await post('/api/tasks',{title:data.get('title'),description:data.get('description'),tagIds:selectedValues(form,'tagIds'),hallIds:selectedValues(form,'hallIds'),allHalls:data.has('allHalls')});
+  const result=await post('/api/tasks',{description:data.get('description'),tagIds:selectedValues(form,'tagIds'),hallIds:selectedValues(form,'hallIds'),allHalls:data.has('allHalls')});
   const tasks=listFrom(result,'tasks');closeModal();await refreshAfterAction();toast(tasks.length>1?`Опубликовано выполнений по холлам: ${tasks.length}`:'Задача опубликована');if(tasks[0])await openTask(tasks[0].id);return;
  }
  if(form.id==='assignment-form'){
@@ -337,16 +521,19 @@ async function submitForm(form) {
 document.addEventListener('submit',async event=>{
  const form=event.target;if(!(form instanceof HTMLFormElement))return;event.preventDefault();
  const button=form.querySelector('button[type="submit"]');if(button?.disabled)return;if(button)button.disabled=true;
- try{await submitForm(form);}catch(error){if(form.id==='login-form'){let node=$('.inline-error',form);if(!node){node=document.createElement('div');node.className='inline-error';form.append(node);}node.textContent=error.message;}else toast(error.message,true);}finally{if(button?.isConnected)button.disabled=false;}
+ try{await submitForm(form);}catch(error){if(form.id==='login-form'){let node=$('.inline-error',form);if(!node){node=document.createElement('div');node.className='inline-error';node.setAttribute('role','alert');form.append(node);}node.textContent=error.message;}else toast(error.message,true);}finally{if(button?.isConnected)button.disabled=false;}
 });
 document.addEventListener('click',async event=>{
- const button=event.target.closest('button,a,tr[data-open-task]');if(!button)return;
+ const button=event.target.closest('button,a,[data-action="dismiss-menu"]');if(!button)return;
  if(button.dataset.nav){event.preventDefault();const options={};for(const key of ['scope','hallId','tagId','box']){const value=button.dataset[key.toLowerCase()];if(value!==undefined)options[key]=value;}navigate(button.dataset.nav,options);return;}
  if(button.dataset.openTask){event.preventDefault();openTask(Number(button.dataset.openTask)).catch(error=>toast(error.message,true));return;}
  if(button.dataset.taskAction){button.disabled=true;try{await post(`/api/tasks/${Number(button.dataset.id)}/${button.dataset.taskAction}`);await refreshAfterAction();toast(button.dataset.taskAction==='claim'?'Задача взята в работу':'Задача выполнена');}catch(error){toast(error.message,true);}finally{if(button.isConnected)button.disabled=false;}return;}
  const action=button.dataset.action;if(!action)return;
  try{
-  if(action==='menu')$('#sidebar').classList.toggle('open');
+  if(action==='menu')setMenu(!$('#sidebar').classList.contains('open'),true);
+  else if(action==='dismiss-menu')setMenu(false,true);
+  else if(action==='reload-view')renderPage();
+  else if(action==='clear-filters'){state.filters=initialFilters();renderTasksPage();$('#task-filters input[name="q"]').focus();await loadCurrent();}
   else if(action==='close-modal')closeModal();
   else if(action==='create-task')showCreateTask();
   else if(action==='logout'){await post('/api/logout');state.boot=null;closeModal();renderLogin();}
@@ -386,15 +573,31 @@ document.addEventListener('change',event=>{
  if(event.target.name==='allHalls'&&event.target.closest('#create-task-form'))$$('[name="hallIds"]',$('#create-task-form')).forEach(input=>{input.disabled=event.target.checked;});
 });
 $('#modal').addEventListener('close',()=>{state.modalType=null;state.detailId=null;state.detail=null;});
-document.addEventListener('keydown',event=>{if(event.key==='Escape')$('#sidebar')?.classList.remove('open');});
+mobileViewport.addEventListener('change',()=>setMenu(false));
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('#sidebar')?.classList.contains('open'))setMenu(false,true);});
 async function poll() {
  if(!state.boot||state.polling||document.hidden)return;state.polling=true;
  try{
   await refreshBootstrap();await loadCurrent();
   const focused=document.activeElement?.matches('input,textarea,select');
-  if(state.detailId&&state.modalType==='task'&&!focused&&!hasQuestionDraft($('#modal'))){const id=state.detailId;const result=await api(`/api/tasks/${id}`);if(state.detailId===id&&state.modalType==='task'){state.detail=result.task||result;renderTaskDetail();}}
+  if(state.detailId&&state.modalType==='task'&&!focused&&!hasQuestionDraft($('#modal'))){const id=state.detailId;const result=await api(`/api/tasks/${id}`);const detail=result.task||result;if(state.detailId===id&&state.modalType==='task'&&JSON.stringify(detail)!==JSON.stringify(state.detail)&&!document.activeElement?.closest('#modal form')){state.detail=detail;renderTaskDetail();}}
   state.offline=false;
- }catch(error){state.offline=true;}finally{state.polling=false;const connection=$('#connection');if(connection){connection.classList.toggle('offline',state.offline);connection.textContent=state.offline?'Нет связи · повторяем подключение':'Изменения синхронизируются';}}
+  } catch {
+   state.offline = true;
+ } finally {
+   state.polling = false;
+   const connection = $("#connection");
+   const syncLabel = $("#sync-label");
+   for (const indicator of [connection, syncLabel]) {
+     indicator?.classList.toggle("offline", state.offline);
+   }
+   if (connection) connection.textContent = state.offline ? "Нет связи · повторяем подключение" : "Синхронизация работает";
+   if (syncLabel) syncLabel.textContent = state.offline ? "Нет связи" : "Синхронизация";
+ }
 }
-async function init(){try{await refreshBootstrap();state.scope=me().homeHallId?'home':'all';renderShell();}catch{renderLogin();}setInterval(poll,4000);}
+async function init(){
+ try{await refreshBootstrap();state.scope=me().homeHallId?'home':'all';renderShell();}
+ catch(error){renderLogin(error.status===401?'':'Сервер недоступен. Проверьте подключение и попробуйте войти.');}
+ setInterval(poll,4000);
+}
 init();
