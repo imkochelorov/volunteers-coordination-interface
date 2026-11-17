@@ -44,6 +44,9 @@ data class Task(
     val createdAt: String,
     val updatedAt: String,
 ) {
+    fun isUnassigned(hasAssignments: Boolean): Boolean =
+        status == TaskStatus.QUEUED && claimedBy == null && assignedBy == null && !hasAssignments
+
     companion object {
         fun fromRow(row: Data) = Task(
             id = row.requiredLong("id"),

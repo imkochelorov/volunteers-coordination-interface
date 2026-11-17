@@ -77,7 +77,14 @@ class ApplicationTest {
             val first = web.post("/api/tasks", mapOf("title" to "Открыть вход"), extra = header)
             assertEquals(first, web.post("/api/tasks", mapOf("title" to "Открыть вход"), extra = header))
             web.post("/api/tasks", mapOf("title" to "Другое действие"), 409, header)
-            assertEquals(1, web.get("/api/tasks").body["tasks"].listOrEmpty().size)
+            val queued = web.get("/api/tasks").body["tasks"].objects().single()
+            assertTrue(queued.enabled("canClaim"))
+            assertTrue(queued.enabled("canAssign"))
+            val id = queued.requiredLong("id")
+            val inProgress = web.post("/api/tasks/$id/claim")
+            assertFalse(inProgress.enabled("canClaim"))
+            assertTrue(inProgress.enabled("canComplete"))
+            assertFalse(web.post("/api/tasks/$id/complete").enabled("canComplete"))
             web.post("/api/tasks", mapOf("description" to "  "), 400)
             val description = "Подготовить аппаратуру\nМикрофоны на стойке"
             val created = web.post("/api/tasks", mapOf("description" to description))["tasks"].objects().single()
@@ -198,12 +205,19 @@ class ApplicationTest {
             for ((person, chat) in listOf(one to 601L, two to 602L)) {
                 val invite = manager.post("/api/volunteers/$person/link").string("url").substringAfter("start=")
                 api.message(app.bot, chat, "/start $invite")
-                assertEquals(chat, app.domain.user(person).longOrNull("telegramId"))
+                assertEquals(chat, app.domain.user(person).telegramId)
                 assertNotNull(app.db.one("SELECT used_at FROM link_tokens WHERE token_hash=?", hashToken(invite))?.longOrNull("used_at"))
             }
             await { api.calls.count { it.first == "sendMessage" && it.second.containsKey("reply_markup") } == 2 }
             api.callback(app.bot, 601, "accept:$task:1")
             assertEquals("in_progress", manager.get("/api/tasks/$task").body.string("status"))
+            await {
+                api.calls.any { (method, payload) ->
+                    method == "editMessageText" && payload.longOrNull("chat_id") == 602L &&
+                        payload.string("text").contains("ожидает принятия") &&
+                        json(payload["reply_markup"]).contains("accept:$task:1")
+                }
+            }
 
             api.callback(app.bot, 601, "question:$task:1")
             val update = api.message(app.bot, 601, "Где взять коробки?")
@@ -247,7 +261,7 @@ class ApplicationTest {
             val invite = manager.post("/api/volunteers/$volunteer/link").string("url").substringAfter("start=")
             api.message(app.bot, 601, "/start $invite")
             api.message(app.bot, 602, "/start $invite")
-            assertEquals(601L, app.domain.user(volunteer).longOrNull("telegramId"))
+            assertEquals(601L, app.domain.user(volunteer).telegramId)
             val task = manager.task("Разметить зал").single().requiredLong("id")
             manager.post("/api/tasks/$task/assign", mapOf("mode" to "all"))
             manager.post("/api/tasks/$task/reset", mapOf("reason" to "Изменили план"))
@@ -257,6 +271,100 @@ class ApplicationTest {
             assertTrue(api.calls.any { it.first == "answerCallbackQuery" && it.second.enabled("show_alert") })
             api.callback(app.bot, 601, "accept:$task:2")
             assertEquals("in_progress", manager.get("/api/tasks/$task").body.string("status"))
+        }
+    }
+
+    @Test
+    fun accountChangesValidatePoolAndRevokeAccessAtomically() {
+        Application(config()).use { app ->
+            val port = app.start()
+            val admin = Web(port).also { it.login() }
+            val oldManager = admin.user("old-manager", "manager")
+            val newManager = admin.user("new-manager", "manager")
+            val volunteer = admin.user("member", "volunteer", manager = oldManager)
+            val oldWeb = Web(port).also { it.login("old-manager") }
+            val newWeb = Web(port).also { it.login("new-manager") }
+            assertEquals(listOf(volunteer), oldWeb.post("/api/volunteers/preview", mapOf("mode" to "free"))["volunteers"]
+                .objects().map { it.requiredLong("id") })
+            newWeb.post("/api/volunteers/preview", mapOf("volunteerIds" to listOf(volunteer)), 403)
+            oldWeb.post("/api/volunteers/preview", mapOf("mode" to false), 400)
+
+            admin.post("/api/admin/users", mapOf("id" to oldManager, "roles" to listOf("organizer")), 409)
+            admin.post("/api/admin/users", mapOf("id" to oldManager, "active" to "invalid"), 400)
+            assertTrue(app.domain.user(oldManager).isManager)
+            val updated = admin.post("/api/admin/users", mapOf("id" to volunteer, "managerId" to newManager))
+            assertEquals(newManager, updated.requiredLong("managerId"))
+            assertFalse("password_hash" in updated)
+            assertEquals(emptyList<Data>(), oldWeb.get("/api/volunteers").body["volunteers"].objects())
+            assertEquals(listOf(volunteer), newWeb.get("/api/volunteers").body["volunteers"].objects().map { it.requiredLong("id") })
+            admin.post("/api/admin/users", mapOf("id" to oldManager, "roles" to listOf("organizer")))
+            oldWeb.get("/api/bootstrap", 401)
+        }
+    }
+
+    @Test
+    fun loginRateLimitAndPasswordChangePreserveSessionSemantics() {
+        Application(config()).use { app ->
+            val port = app.start()
+            val first = Web(port).also { it.login() }
+            val second = Web(port).also { it.login() }
+            repeat(5) { Web(port).login("unknown", 401) }
+            Web(port).login("unknown", 429)
+            first.post("/api/change-password", mapOf("currentPassword" to "incorrect", "password" to "new-test-password"), 403)
+            val change = mapOf("currentPassword" to fixturePassword, "password" to "new-test-password")
+            val key = mapOf("Idempotency-Key" to "password-change")
+            assertTrue(first.post("/api/change-password", change, extra = key).enabled("ok"))
+            assertTrue(first.post("/api/change-password", change, extra = key).enabled("ok"))
+            first.get("/api/bootstrap")
+            second.get("/api/bootstrap", 401)
+            Web(port).login(expected = 401)
+        }
+    }
+
+    @Test
+    fun caughtNestedFailureRollsBackOnlyItsWrites() {
+        Database(":memory:").use { db ->
+            db.transaction {
+                db.execute("INSERT INTO settings VALUES ('outer','kept')")
+                assertThrows(AppError::class.java) {
+                    db.transaction {
+                        db.execute("INSERT INTO settings VALUES ('inner','discarded')")
+                        fail(409, "Test rollback")
+                    }
+                }
+                db.execute("INSERT INTO settings VALUES ('after','kept')")
+            }
+            assertEquals(listOf("after", "outer"), db.all("SELECT key FROM settings WHERE value='kept' ORDER BY key").map { it.string("key") })
+            assertNull(db.one("SELECT value FROM settings WHERE key='inner'"))
+        }
+    }
+
+    @Test
+    fun multipartDeliveryResumesAfterRestart() {
+        val path = config().database
+        val body = "А".repeat(3799) + "🎈" + "Б".repeat(400)
+        val delivered = mutableListOf<String>()
+        Database(path).use { db ->
+            val domain = Domain(db)
+            domain.enqueue("message", null, null, mapOf("chatId" to 601L, "text" to body), "multipart")
+            val outbox = TelegramOutbox(domain, TelegramApi { _, payload ->
+                if (delivered.isNotEmpty()) throw DeliveryError("Test retry")
+                delivered += payload.string("text")
+                mapOf("message_id" to 1)
+            })
+            outbox.drain()
+            assertEquals(3799, delivered.single().length)
+            assertEquals("failed", db.one("SELECT status FROM outbox WHERE event_key='multipart'")?.string("status"))
+        }
+        Database(path).use { db ->
+            db.execute("UPDATE outbox SET next_attempt=0 WHERE event_key='multipart'")
+            TelegramOutbox(Domain(db), TelegramApi { _, payload ->
+                delivered += payload.string("text")
+                mapOf("message_id" to 2)
+            }).drain()
+            assertEquals(2, delivered.size)
+            assertEquals(body, delivered.joinToString(""))
+            assertEquals("sent", db.one("SELECT status FROM outbox WHERE event_key='multipart'")?.string("status"))
         }
     }
 

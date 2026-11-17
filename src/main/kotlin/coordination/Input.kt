@@ -25,3 +25,14 @@ fun text(value: Any?, label: String, limit: Int, required: Boolean = true): Stri
     }
     return value.trim()
 }
+
+internal fun Data.booleanOrDefault(key: String, fallback: Boolean): Boolean {
+    if (key !in this) return fallback
+    val value = this[key]
+    return when {
+        value is Boolean -> value
+        value.exactLongOrNull() == 1L -> true
+        value.exactLongOrNull() == 0L -> false
+        else -> fail(400, "Некорректное значение флага «$key».")
+    }
+}

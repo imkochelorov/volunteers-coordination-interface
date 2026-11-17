@@ -7,16 +7,26 @@ import java.sql.Connection
 import java.sql.DriverManager
 
 class Database(path: String) : Closeable {
-    private val connection: Connection
-    private var inTransaction = false
+    private val connection: Connection = open(path)
+    private var transactionDepth = 0
 
     init {
-        if (path != ":memory:") Files.createDirectories(Path.of(path).toAbsolutePath().parent)
-        connection = DriverManager.getConnection("jdbc:sqlite:$path")
-        val schema = checkNotNull(javaClass.getResource("/schema.sql")).readText()
-        schema.split(';').map(String::trim).filter(String::isNotEmpty).forEach { sql ->
-            connection.createStatement().use { it.execute(sql) }
+        try {
+            val schema = checkNotNull(javaClass.getResource("/schema.sql")).readText()
+            schema.split(';').map(String::trim).filter(String::isNotEmpty).forEach(::statement)
+            initializeData()
+        } catch (error: Throwable) {
+            runCatching { connection.close() }.onFailure(error::addSuppressed)
+            throw error
         }
+    }
+
+    private fun open(path: String): Connection {
+        if (path != ":memory:") Files.createDirectories(Path.of(path).toAbsolutePath().parent)
+        return DriverManager.getConnection("jdbc:sqlite:$path")
+    }
+
+    private fun initializeData() {
         transaction {
             if (one("SELECT 1 FROM pragma_table_info('tags') WHERE name='color'") == null) {
                 execute("ALTER TABLE tags ADD COLUMN color TEXT NOT NULL DEFAULT ''")
@@ -43,28 +53,43 @@ class Database(path: String) : Closeable {
     @Synchronized
     fun <T> access(block: () -> T): T = block()
 
+    /**
+     * The single connection is shared by HTTP and the bot. Nested writes use savepoints
+     * so a handled failure cannot commit partial changes from the failed operation.
+     */
     @Synchronized
     fun <T> transaction(block: () -> T): T {
-        if (inTransaction) return block()
-        connection.createStatement().use { it.execute("BEGIN IMMEDIATE") }
-        inTransaction = true
+        val outermost = transactionDepth == 0
+        val savepoint = "nested_$transactionDepth"
+        statement(if (outermost) "BEGIN IMMEDIATE" else "SAVEPOINT $savepoint")
+        transactionDepth++
         try {
             val result = block()
-            connection.createStatement().use { it.execute("COMMIT") }
+            statement(if (outermost) "COMMIT" else "RELEASE SAVEPOINT $savepoint")
             return result
         } catch (failure: Throwable) {
-            runCatching { connection.createStatement().use { it.execute("ROLLBACK") } }
+            runCatching {
+                if (outermost) statement("ROLLBACK") else {
+                    statement("ROLLBACK TO SAVEPOINT $savepoint")
+                    statement("RELEASE SAVEPOINT $savepoint")
+                }
+            }.onFailure(failure::addSuppressed)
             throw failure
         } finally {
-            inTransaction = false
+            transactionDepth--
         }
+    }
+
+    private fun statement(sql: String) {
+        connection.createStatement().use { it.execute(sql) }
     }
 
     @Synchronized
     fun all(sql: String, vararg args: Any?): List<Data> = connection.prepareStatement(sql).use { statement ->
         args.forEachIndexed { index, value -> statement.setObject(index + 1, value) }
         statement.executeQuery().use { rows ->
-            val fields = (1..rows.metaData.columnCount).associateWith { rows.metaData.getColumnLabel(it) }
+            val metadata = rows.metaData
+            val fields = (1..metadata.columnCount).associateWith(metadata::getColumnLabel)
             buildList {
                 while (rows.next()) add(fields.entries.associate { (column, label) ->
                     val value = rows.getObject(column)
