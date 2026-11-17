@@ -51,9 +51,14 @@ class Accounts(private val domain: Domain) {
         val old = input["id"]?.let { db.one("SELECT * FROM tags WHERE id=?", id(it)) ?: fail(404, "Тег не найден.") }
         if (old != null && old.string("kind") != kind) fail(409, "Тип существующего тега изменить нельзя. Создайте другой тег.")
         if (db.one("SELECT id FROM tags WHERE name=? AND id!=?", name, old?.longOrNull("id") ?: 0) != null) fail(409, "Такой тег уже существует.")
-        val tagId = old?.requiredLong("id") ?: db.insert("INSERT INTO tags(name,kind) VALUES (?,?)", name, kind)
-        if (old != null) db.execute("UPDATE tags SET name=? WHERE id=?", name, tagId)
-        checkNotNull(db.one("SELECT id,name,kind FROM tags WHERE id=?", tagId))
+        val color = if ("color" in input) {
+            val selected = input["color"] as? String ?: fail(400, "Укажите цвет тега.")
+            if (selected.isNotEmpty() && !Regex("#[0-9a-fA-F]{6}").matches(selected)) fail(400, "Некорректный цвет тега.")
+            selected.lowercase()
+        } else old?.string("color").orEmpty()
+        val tagId = old?.requiredLong("id") ?: db.insert("INSERT INTO tags(name,kind,color) VALUES (?,?,?)", name, kind, color)
+        if (old != null) db.execute("UPDATE tags SET name=?,color=? WHERE id=?", name, color, tagId)
+        checkNotNull(db.one("SELECT id,name,kind,color FROM tags WHERE id=?", tagId))
     }
 
     fun settings(actor: Long, input: Data): Data {

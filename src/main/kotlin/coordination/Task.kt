@@ -15,6 +15,17 @@ enum class TaskStatus(val code: String) {
     }
 }
 
+enum class TaskPriority(val code: String, val label: String) {
+    LOW("low", "Низкий"),
+    NORMAL("normal", "Обычный"),
+    HIGH("high", "Высокий");
+
+    companion object {
+        fun fromInput(value: Any?): TaskPriority = entries.firstOrNull { it.code == value }
+            ?: fail(400, "Выберите приоритет задачи.")
+    }
+}
+
 data class Task(
     val id: Long,
     val groupId: Long,
@@ -24,6 +35,9 @@ data class Task(
     val hallId: Long?,
     val tagIds: List<Long>,
     val status: TaskStatus,
+    val priority: TaskPriority,
+    val needsStrongVolunteers: Boolean,
+    val volunteerTarget: String,
     val claimedBy: Long?,
     val assignedBy: Long?,
     val generation: Long,
@@ -42,6 +56,9 @@ data class Task(
                 it.exactLongOrNull() ?: error("Invalid task tag identifier")
             },
             status = TaskStatus.fromCode(row.string("status")),
+            priority = TaskPriority.entries.first { it.code == row.string("priority") },
+            needsStrongVolunteers = row.enabled("needs_strong_volunteers"),
+            volunteerTarget = row.string("volunteer_target"),
             claimedBy = row.longOrNull("claimed_by"),
             assignedBy = row.longOrNull("assigned_by"),
             generation = row.requiredLong("generation"),
@@ -73,6 +90,9 @@ data class TaskSummary(
         "hallId" to task.hallId,
         "tagIds" to task.tagIds,
         "status" to task.status.code,
+        "priority" to task.priority.code,
+        "needsStrongVolunteers" to task.needsStrongVolunteers,
+        "volunteerTarget" to task.volunteerTarget,
         "claimedBy" to task.claimedBy,
         "assignedBy" to task.assignedBy,
         "generation" to task.generation,

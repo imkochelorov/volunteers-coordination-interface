@@ -18,6 +18,18 @@ class Database(path: String) : Closeable {
             connection.createStatement().use { it.execute(sql) }
         }
         transaction {
+            if (one("SELECT 1 FROM pragma_table_info('tags') WHERE name='color'") == null) {
+                execute("ALTER TABLE tags ADD COLUMN color TEXT NOT NULL DEFAULT ''")
+            }
+            if (one("SELECT 1 FROM pragma_table_info('tasks') WHERE name='priority'") == null) {
+                execute("ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'")
+            }
+            if (one("SELECT 1 FROM pragma_table_info('tasks') WHERE name='needs_strong_volunteers'") == null) {
+                execute("ALTER TABLE tasks ADD COLUMN needs_strong_volunteers INTEGER NOT NULL DEFAULT 0")
+            }
+            if (one("SELECT 1 FROM pragma_table_info('tasks') WHERE name='volunteer_target'") == null) {
+                execute("ALTER TABLE tasks ADD COLUMN volunteer_target TEXT NOT NULL DEFAULT ''")
+            }
             if (one("SELECT id FROM tags LIMIT 1") == null) {
                 val names = listOf("TC", "TC Assistant", "Press", "Ceremony", "Registration", "Baloons", "Live",
                     "Hall 1", "Hall 2", "Hall 3", "Hall 4", "Hall 5", "Space")

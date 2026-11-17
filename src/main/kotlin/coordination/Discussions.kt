@@ -51,6 +51,14 @@ class Discussions(private val domain: Domain) {
             .thenByDescending { it.string("urgency") == "urgent" }.thenByDescending { it.requiredLong("id") })
     }
 
+    fun telegramThreads(actor: Long): List<Data> {
+        val incoming = list(actor, "incoming")
+        val own = db.all("SELECT * FROM questions WHERE asked_by=? AND state!='closed' ORDER BY id DESC LIMIT 50", actor)
+            .map(::view)
+        return (incoming + own).distinctBy { it.requiredLong("id") }
+            .sortedByDescending { it.requiredLong("id") }.take(50)
+    }
+
     private fun notify(users: List<Long>, id: Long, event: String, message: String) {
         for (recipient in users.distinct()) {
             val count = db.execute("INSERT OR IGNORE INTO notifications(user_id,question_id,event_key,text,created_at) VALUES (?,?,?,?,?)",
@@ -109,7 +117,10 @@ class Discussions(private val domain: Domain) {
         db.execute("UPDATE questions SET state=?,updated_at=? WHERE id=?", if (actor == asker) "open" else "answered", now, id)
         notify((listOf(controller) + recipients(q)).filter { it != actor && !(managerReply && it == asker) },
             id, "question:$id:message:$message", "Новый ответ по задаче «$title»")
-        if (managerReply) domain.enqueue("message", asker, task, mapOf("text" to "Ответ менеджера по задаче «$title»:\n$body", "questionId" to id))
+        if (managerReply) domain.enqueue("message", asker, task, mapOf(
+            "text" to "Ответ менеджера · Вопрос #$id\nЗадача «$title»\n$body",
+            "questionId" to id, "forceReply" to true,
+        ))
         domain.record(task, actor, "Добавлен ответ на вопрос", mapOf("questionId" to id))
         domain.refresh(task)
         view(question(id))

@@ -28,7 +28,7 @@ class Domain(val db: Database) {
         if (!it.hasRole("admin") && !it.hasRole("manager")) fail(403, "Действие доступно менеджеру.")
     }
 
-    fun tags() = db.all("SELECT id,name,kind FROM tags ORDER BY id")
+    fun tags() = db.all("SELECT id,name,kind,color FROM tags ORDER BY id")
     fun settings() = mapOf("crossHall" to (db.one("SELECT value FROM settings WHERE key='crossHall'")?.string("value") == "true"))
     fun validateTags(value: Any?): List<Long> {
         val selected = ids(value)
@@ -82,13 +82,26 @@ class Domain(val db: Database) {
         )
     }
 
+    private fun boardTagSets(actor: Long): Data {
+        val saved = db.one("SELECT value FROM settings WHERE key=?", "boardTagSets:$actor") ?: return emptyMap()
+        return decode(saved.string("value")).objectOrEmpty()
+    }
+
+    fun saveBoardTagSets(actor: Long, input: Data): Data = db.transaction {
+        organizer(actor)
+        val sets = mapOf("assign" to validateTags(input["assign"]), "watch" to validateTags(input["watch"]))
+        db.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            "boardTagSets:$actor", json(sets))
+        sets
+    }
+
     fun bootstrap(actor: Long): Data {
         val user = organizer(actor)
         val users = db.all("SELECT id FROM users ORDER BY name").map { user(it.requiredLong("id")) }.map {
             if (user.hasRole("admin") || it.longOrNull("managerId") == actor || it.longOrNull("id") == actor) it
             else it - listOf("telegramId", "chatId", "login")
         }
-        return mapOf("user" to user, "users" to users, "tags" to tags(), "settings" to settings(),
+        return mapOf("user" to user, "users" to users, "tags" to tags(), "settings" to settings(), "boardTagSets" to boardTagSets(actor),
             "personalTags" to db.all("SELECT id,name,manager_id AS managerId FROM personal_tags WHERE manager_id=? ORDER BY name", actor),
             "notifications" to db.all("""SELECT n.id,n.question_id AS questionId,q.task_id AS taskId,n.text,n.created_at AS createdAt
                 FROM notifications n LEFT JOIN questions q ON q.id=n.question_id WHERE n.user_id=? ORDER BY n.id DESC LIMIT 100""", actor))
@@ -124,12 +137,18 @@ class Domain(val db: Database) {
                     "waiting" -> summary.awaitingAcceptance
                     else -> true
                 }
-                val mine = actor in listOf(task.claimedBy, task.assignedBy, task.authorId) ||
-                    summary.assignments.any { it.volunteerId == actor }
-                (scope != "mine" || mine) && matchesAssignment &&
+                val assignedToActor = task.claimedBy == actor || summary.assignments.any { it.volunteerId == actor }
+                val matchesScope = when (scope) {
+                    "created" -> task.authorId == actor
+                    "assigned" -> assignedToActor
+                    "mine" -> assignedToActor || task.assignedBy == actor || task.authorId == actor
+                    else -> true
+                }
+                matchesScope && matchesAssignment &&
                     (!blockedOnly || summary.blocked) && (!questionsOnly || summary.openQuestions > 0)
             }
-            .sortedWith(compareByDescending<TaskSummary> { it.blocked }.thenByDescending { it.task.id })
+            .sortedWith(compareByDescending<TaskSummary> { it.blocked }
+                .thenByDescending { it.task.priority }.thenByDescending { it.task.id })
             .map(TaskSummary::toResponse)
             .toList()
     }
@@ -144,11 +163,15 @@ class Domain(val db: Database) {
                 .map { it + ("data" to decode(it.string("data"))) },
             "siblings" to db.all("SELECT * FROM tasks WHERE group_id=? ORDER BY hall_id,id", task.groupId)
                 .map(Task::fromRow).filter { user.web() || assigned(it.id, actor) }.map { taskSummary(it).toResponse() },
-            "canWork" to allowed, "canReset" to (allowed && !task.status.isTerminal && canModify(user, task)))
+            "canWork" to allowed, "canReset" to (allowed && !task.status.isTerminal && canModify(user, task)),
+            "canEditOptions" to (allowed && !task.status.isTerminal && canModify(user, task)))
     }
 
     fun createTask(actor: Long, input: Data): List<Data> = db.transaction {
         organizer(actor)
+        val priority = input["priority"]?.let { TaskPriority.fromInput(it) } ?: TaskPriority.NORMAL
+        val strong = strongRequirement(input, false)
+        val target = volunteerTarget(input["volunteerTarget"])
         val suppliedTitle = input["title"]
         val description = text(input["description"] ?: "", "Описание", 15000, required = suppliedTitle == null)
         val title = if (suppliedTitle != null) {
@@ -168,11 +191,47 @@ class Domain(val db: Database) {
         val group = db.insert("INSERT INTO task_groups(title,description,author_id,created_at) VALUES (?,?,?,?)", title, description, actor, now)
         val destinations: List<Long?> = if (halls.isEmpty()) listOf(null) else halls
         destinations.map { hall ->
-            val task = db.insert("""INSERT INTO tasks(group_id,title,description,author_id,hall_id,tag_ids,status,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,'queued',?,?)""", group, title, description, actor, hall, json(directions + listOfNotNull(hall)), now, now)
+            val task = db.insert("""INSERT INTO tasks(group_id,title,description,author_id,hall_id,tag_ids,status,created_at,updated_at,priority,needs_strong_volunteers,volunteer_target)
+                VALUES (?,?,?,?,?,?,'queued',?,?,?,?,?)""", group, title, description, actor, hall,
+                json(directions + listOfNotNull(hall)), now, now, priority.code, if (strong) 1 else 0, target)
             record(task, actor, "Задача опубликована", mapOf("groupId" to group, "hallId" to hall))
             taskSummary(rawTask(task)).toResponse()
         }
+    }
+
+    private fun strongRequirement(input: Data, default: Boolean): Boolean {
+        if ("needsStrongVolunteers" !in input) return default
+        return input["needsStrongVolunteers"] as? Boolean ?: fail(400, "Укажите, нужны ли сильные волонтёры.")
+    }
+
+    private fun volunteerTarget(value: Any?): String {
+        if (value == null || value is String && value.isBlank()) return ""
+        val raw = (value as? String)?.trim() ?: value.exactLongOrNull()?.toString().orEmpty()
+        val match = Regex("([0-9]{1,4})(?:\\s*[-–—]\\s*([0-9]{1,4}))?").matchEntire(raw)
+            ?: fail(400, "Укажите число волонтёров или диапазон, например 2–3.")
+        val min = match.groupValues[1].toInt()
+        val max = match.groups[2]?.value?.toInt() ?: min
+        if (min !in 1..2000 || max !in min..2000) fail(400, "Укажите от 1 до 2000 волонтёров по возрастанию.")
+        return if (min == max) min.toString() else "$min–$max"
+    }
+
+    fun updateTaskOptions(actor: Long, id: Long, input: Data): Data = db.transaction {
+        val user = organizer(actor)
+        val current = rawTask(id)
+        work(user, current)
+        active(current)
+        if (!canModify(user, current)) fail(403, "Изменить задачу может автор, участник или администратор.")
+        val priority = input["priority"]?.let { TaskPriority.fromInput(it) } ?: current.priority
+        val strong = strongRequirement(input, current.needsStrongVolunteers)
+        val target = if ("volunteerTarget" in input) volunteerTarget(input["volunteerTarget"]) else current.volunteerTarget
+        if (priority != current.priority || strong != current.needsStrongVolunteers || target != current.volunteerTarget) {
+            db.execute("UPDATE tasks SET priority=?,needs_strong_volunteers=?,volunteer_target=? WHERE id=?",
+                priority.code, if (strong) 1 else 0, target, id)
+            record(id, actor, "Изменены приоритет и требования",
+                mapOf("priority" to priority.code, "needsStrongVolunteers" to strong, "volunteerTarget" to target))
+            refresh(id)
+        }
+        task(actor, id)
     }
 
     private fun unassigned(task: Task) {

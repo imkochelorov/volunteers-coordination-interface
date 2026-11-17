@@ -152,7 +152,8 @@ class Telegram(
 
     private fun process(update: Data, chat: Long, event: String): String? {
         val callback = update["callback_query"].objectOrEmpty()
-        val body = update["message"].objectOrEmpty().string("text").trim()
+        val incoming = update["message"].objectOrEmpty()
+        val body = incoming.string("text").trim()
         val command = commandPattern.matchEntire(body)
         val name = command?.groupValues?.get(1)
         val argument = command?.groupValues?.get(2).orEmpty().trim()
@@ -171,15 +172,32 @@ class Telegram(
             processCommand(name, argument, actor, event)
             return null
         }
+        val repliedMessage = incoming["reply_to_message"].objectOrEmpty().longOrNull("message_id")
+        if (repliedMessage != null && body.isNotEmpty()) {
+            val thread = db.one("SELECT question_id FROM telegram_question_messages WHERE chat_id=? AND message_id=?",
+                chat, repliedMessage)?.requiredLong("question_id")
+            if (thread != null) {
+                message("$event:reply", actor, replyInThread(actor, thread, body))
+            } else {
+                message("$event:reply-hint", actor, "Это сообщение не связано с обсуждением. Откройте /questions и ответьте в нужном треде.")
+            }
+            return null
+        }
         val pending = db.one("SELECT * FROM telegram_state WHERE user_id=?", actor)
         if (pending != null && body.isNotEmpty()) {
             discussions.create(actor, pending.requiredLong("task_id"), mapOf("body" to body), pending.requiredLong("generation"))
             db.execute("DELETE FROM telegram_state WHERE user_id=?", actor)
             message("$event:question", actor, "Вопрос отправлен менеджеру. Ответ придёт сюда.")
         } else {
-            message("$event:hint", actor, "Чтобы задать вопрос, откройте /tasks и нажмите «Задать вопрос» в карточке задания.")
+            message("$event:hint", actor, "Продолжить обсуждение — /questions. Задать новый вопрос — /tasks → «Новый вопрос».")
         }
         return null
+    }
+
+    private fun replyInThread(actor: Long, questionId: Long, body: String): String {
+        discussions.reply(actor, questionId, mapOf("body" to body))
+        db.execute("DELETE FROM telegram_state WHERE user_id=?", actor)
+        return "Ответ добавлен в обсуждение №$questionId."
     }
 
     private fun action(data: String, actor: Long, event: String): String {
@@ -203,8 +221,8 @@ class Telegram(
                 if (!domain.assigned(task, actor)) fail(403, "Назначение недоступно. Используйте /tasks.")
                 db.execute("""INSERT INTO telegram_state(user_id,task_id,generation) VALUES(?,?,?)
                     ON CONFLICT(user_id) DO UPDATE SET task_id=excluded.task_id,generation=excluded.generation""", actor, task, generation)
-                message("$event:prompt", actor, "Вопрос по задаче №$task «${current.title}».\nОтправьте текст следующим сообщением. /cancel — отменить ввод.")
-                "Отправьте текст вопроса следующим сообщением."
+                message("$event:prompt", actor, "Новый вопрос по задаче №$task «${current.title}».\nНапишите его обычным сообщением. /cancel — отменить.")
+                "Напишите новый вопрос обычным сообщением."
             }
         }
     }
@@ -225,16 +243,15 @@ class Telegram(
                 }
             }
             "questions" -> {
-                val items = discussions.list(actor, "incoming")
-                if (items.isEmpty()) "Открытых входящих вопросов нет." else items.joinToString("\n\n", "Входящие вопросы\n\n") { q ->
+                val items = discussions.telegramThreads(actor)
+                if (items.isEmpty()) "Открытых обсуждений нет." else items.joinToString("\n\n", "Открытые обсуждения\n\n") { q ->
                     val blocked = if (q.enabled("blocking")) " · блокирует работу" else ""
                     "Вопрос №${q["id"]} · задача №${q["taskId"]}$blocked\n${q["messages"].objects().lastOrNull()?.string("body").orEmpty()}\n/reply ${q["id"]} ваш ответ"
                 }
             }
             "reply" -> {
                 val match = replyPattern.matchEntire(argument) ?: fail(400, "Укажите номер вопроса и текст: /reply 123 ваш ответ")
-                discussions.reply(actor, id(match.groupValues[1]), mapOf("body" to match.groupValues[2]))
-                "Ответ добавлен в обсуждение №${match.groupValues[1]}."
+                replyInThread(actor, id(match.groupValues[1]), match.groupValues[2])
             }
             "available", "unavailable" -> {
                 val available = name == "available"
@@ -259,7 +276,12 @@ class Telegram(
         val current = domain.assigned(taskId, actor) && task.generation == generation
         val hall = domain.tags().find { it.longOrNull("id") == task.hallId }?.string("name")?.let { " · $it" }.orEmpty()
         val label = if (task.description.startsWith(task.title)) "" else "\n${task.title}"
-        val heading = "Задача №$taskId$hall$label\n\n"
+        val options = buildList {
+            if (task.priority != TaskPriority.NORMAL) add("Приоритет: ${task.priority.label.lowercase()}")
+            if (task.needsStrongVolunteers) add("Нужны сильные волонтёры")
+            if (task.volunteerTarget.isNotEmpty()) add("Нужно волонтёров: ${task.volunteerTarget}")
+        }.joinToString(" · ")
+        val heading = "Задача №$taskId$hall$label" + if (options.isEmpty()) "\n\n" else "\n$options\n\n"
         val status = states.getValue(task.status.code) + if (view.blocked) " · ⛔ Заблокирована" else ""
         val note = when {
             !current -> "Это назначение снято. Кнопки недействительны."
@@ -274,7 +296,7 @@ class Telegram(
             if (current && !task.status.isTerminal) {
                 if (task.status == TaskStatus.QUEUED) add(button("Взять в работу", "accept"))
                 if (task.status == TaskStatus.IN_PROGRESS) add(button("Готово", "complete"))
-                add(button("Задать вопрос", "question"))
+                add(button("Новый вопрос", "question"))
             }
         }
         return Card("$heading${description.take(split)}\n\n$status\n$note", mapOf("inline_keyboard" to keyboard), description.drop(split))
@@ -331,9 +353,18 @@ class Telegram(
                     "task" -> deliverTask(job.requiredLong("task_id"), checkNotNull(user).requiredLong("id"), chat)
                     "message" -> {
                         var remaining = payload.string("text").ifEmpty { "Уведомление" }
+                        val questionId = payload.longOrNull("questionId")
                         while (remaining.isNotEmpty()) {
                             val end = safeBoundary(remaining, 3800)
-                            api.call("sendMessage", mapOf("chat_id" to chat, "text" to remaining.take(end)))
+                            val prompt = if (questionId != null && payload.enabled("forceReply") && end == remaining.length) {
+                                mapOf("reply_markup" to mapOf("force_reply" to true, "input_field_placeholder" to "Продолжить обсуждение"))
+                            } else emptyMap()
+                            val sent = api.call("sendMessage", mapOf("chat_id" to chat, "text" to remaining.take(end)) + prompt)
+                            if (questionId != null) {
+                                val messageId = sent.objectOrEmpty().requiredLong("message_id")
+                                db.execute("INSERT OR IGNORE INTO telegram_question_messages(chat_id,message_id,question_id) VALUES (?,?,?)",
+                                    chat, messageId, questionId)
+                            }
                             remaining = remaining.drop(end)
                         }
                     }

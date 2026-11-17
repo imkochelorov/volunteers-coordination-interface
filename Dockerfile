@@ -1,10 +1,15 @@
+# syntax=docker/dockerfile:1
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /source
-COPY gradlew settings.gradle.kts build.gradle.kts ./
+ENV GRADLE_USER_HOME=/opt/gradle-home
+COPY --chmod=0755 gradlew ./
+RUN sed -i 's/\r$//' gradlew
+COPY settings.gradle.kts build.gradle.kts ./
 COPY gradle/ gradle/
 COPY src/ src/
 COPY public/ public/
-RUN chmod +x gradlew && ./gradlew --no-daemon installDist
+RUN --mount=type=cache,id=volunteers-coordination-gradle,target=/opt/gradle-home,sharing=locked \
+    ./gradlew --no-daemon installDist
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app

@@ -50,7 +50,7 @@ data class Config(
     }
 }
 
-private val taskRoute = Regex("/api/tasks/(\\d+)(?:/(claim|assign|complete|cancel|reset|questions))?")
+private val taskRoute = Regex("/api/tasks/(\\d+)(?:/(claim|assign|complete|cancel|reset|questions|options))?")
 private val volunteerRoute = Regex("/api/volunteers/(\\d+)/(tags|link)")
 private val questionRoute = Regex("/api/questions/(\\d+)/(reply|forward|close)")
 private val deliveryRoute = Regex("/api/deliveries/(\\d+)/retry")
@@ -59,8 +59,7 @@ private val sessionCookie = Regex("(?:^|;\\s*)coord_session=([a-f0-9]{64})(?=;|$
 private val files = mapOf("/" to ("index.html" to "text/html"), "/index.html" to ("index.html" to "text/html"),
     "/app.js" to ("app.js" to "text/javascript"),
     "/ui.js" to ("ui.js" to "text/javascript"),
-    "/landing-content.js" to ("landing-content.js" to "text/javascript"),
-    "/landing.js" to ("landing.js" to "text/javascript"),
+    "/login-screen.js" to ("login-screen.js" to "text/javascript"),
     "/style.css" to ("style.css" to "text/css"),
     "/assets/lidia-perovskaya.jpg" to ("assets/lidia-perovskaya.jpg" to "image/jpeg"),
     "/assets/neerc-balloon.png" to ("assets/neerc-balloon.png" to "image/png"),
@@ -69,6 +68,7 @@ private val files = mapOf("/" to ("index.html" to "text/html"), "/index.html" to
     "/assets/nerc-logo.svg" to ("assets/nerc-logo.svg" to "image/svg+xml"),
     "/assets/manrope.ttf" to ("assets/manrope.ttf" to "font/ttf"),
     "/assets/OFL-Manrope.txt" to ("assets/OFL-Manrope.txt" to "text/plain"),
+    "/assets/LUCIDE-LICENSE.txt" to ("assets/LUCIDE-LICENSE.txt" to "text/plain"),
 )
 private val ok = mapOf("ok" to true)
 private const val sessionDuration = 43_200_000L
@@ -264,6 +264,7 @@ class Application(private val config: Config, api: TelegramApi = TelegramHttp(co
     private fun mutate(path: String, actor: Long, body: Data, session: Data): Data {
         when (path) {
             "/api/tasks" -> return mapOf("tasks" to domain.createTask(actor, body))
+            "/api/board/tag-sets" -> return domain.saveBoardTagSets(actor, body)
             "/api/volunteers/preview" -> return mapOf("volunteers" to domain.preview(actor, body))
             "/api/admin/settings" -> return accounts.settings(actor, body)
             "/api/admin/tags" -> return accounts.tag(actor, body)
@@ -279,6 +280,7 @@ class Application(private val config: Config, api: TelegramApi = TelegramHttp(co
         taskRoute.matchEntire(path)?.let { match ->
             val task = id(match.groupValues[1])
             return when (match.groupValues[2]) {
+                "options" -> domain.updateTaskOptions(actor, task, body)
                 "claim" -> domain.claim(actor, task)
                 "assign" -> domain.assign(actor, task, body)
                 "complete" -> domain.complete(actor, task)

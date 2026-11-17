@@ -89,6 +89,33 @@ class ApplicationTest {
     }
 
     @Test
+    fun volunteerTargetAcceptsExactCountsAndRangesAndPersistsPerTask() {
+        var taskId = 0L
+        Application(config()).use { app ->
+            val admin = Web(app.start()).also { it.login() }
+            val halls = admin.get("/api/bootstrap").body["tags"].objects()
+                .filter { it.string("kind") == "hall" }.take(2).map { it.requiredLong("id") }
+            val tasks = admin.post("/api/tasks", mapOf("description" to "Расставить столы",
+                "hallIds" to halls, "volunteerTarget" to "2 - 3"))["tasks"].objects()
+            assertEquals(listOf("2–3", "2–3"), tasks.map { it.string("volunteerTarget") })
+            taskId = tasks.first().requiredLong("id")
+            val secondId = tasks.last().requiredLong("id")
+            admin.post("/api/tasks/$taskId/options", mapOf("volunteerTarget" to "3–2"), 400)
+            val updated = admin.post("/api/tasks/$taskId/options", mapOf("volunteerTarget" to 4))
+            assertEquals("4", updated.string("volunteerTarget"))
+            assertEquals("2–3", admin.get("/api/tasks/$secondId").body.string("volunteerTarget"))
+            val previous = admin.task("Задача без количества").single()
+            assertEquals("", previous.string("volunteerTarget"))
+        }
+        Application(config().copy(password = null)).use { app ->
+            val admin = Web(app.start()).also { it.login() }
+            assertEquals("4", admin.get("/api/tasks/$taskId").body.string("volunteerTarget"))
+            val cleared = admin.post("/api/tasks/$taskId/options", mapOf("volunteerTarget" to ""))
+            assertEquals("", cleared.string("volunteerTarget"))
+        }
+    }
+
+    @Test
     fun hallPermissionsIndependentTasksAndPersistence() {
         var first = 0L
         Application(config()).use { app ->
@@ -191,7 +218,15 @@ class ApplicationTest {
             receiver.post("/api/questions/$qid/reply", mapOf("body" to "В комнате 3"))
             assertTrue(manager.get("/api/tasks/$task").body.enabled("blocked"))
             manager.post("/api/questions/$qid/reply", mapOf("body" to "Заберите у стойки"))
-            await { api.calls.any { it.first == "sendMessage" && it.second.string("text").contains("Заберите у стойки") } }
+            await { app.db.one("SELECT 1 FROM outbox WHERE status='sent' AND payload LIKE ?", "%Заберите у стойки%") != null }
+            val replyTo = api.sentMessages.single { it.second.string("text").contains("Заберите у стойки") }.first
+            api.callback(app.bot, 601, "question:$task:1")
+            val followUp = api.message(app.bot, 601, "А какая стойка?", replyTo)
+            app.bot.handle(followUp)
+            val continued = manager.get("/api/questions?box=volunteer").body["questions"].objects().single()
+            assertEquals(qid, continued.requiredLong("id"))
+            assertEquals("А какая стойка?", continued["messages"].objects().last().string("body"))
+            assertEquals(1, continued["messages"].objects().count { it.string("body") == "А какая стойка?" })
             manager.post("/api/questions/$qid/close")
             assertFalse(manager.get("/api/tasks/$task").body.enabled("blocked"))
             api.callback(app.bot, 602, "complete:$task:1")
@@ -235,17 +270,23 @@ class ApplicationTest {
 
     private class TestBot : TelegramApi {
         val calls = java.util.concurrent.CopyOnWriteArrayList<Pair<String, Data>>()
+        val sentMessages = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, Data>>()
         private val counter = java.util.concurrent.atomic.AtomicLong()
         override fun call(method: String, payload: Data): Any? {
             calls += method to payload
             return when (method) {
                 "getUpdates" -> emptyList<Data>()
-                "sendMessage" -> mapOf("message_id" to counter.incrementAndGet())
+                "sendMessage" -> {
+                    val messageId = counter.incrementAndGet()
+                    sentMessages += messageId to payload
+                    mapOf("message_id" to messageId)
+                }
                 else -> true
             }
         }
-        fun message(bot: Telegram, chat: Long, text: String): Data {
-            val message = mapOf("from" to mapOf("id" to chat), "chat" to mapOf("id" to chat, "type" to "private"), "text" to text)
+        fun message(bot: Telegram, chat: Long, text: String, replyTo: Long? = null): Data {
+            val message = mapOf("from" to mapOf("id" to chat), "chat" to mapOf("id" to chat, "type" to "private"), "text" to text) +
+                if (replyTo == null) emptyMap() else mapOf("reply_to_message" to mapOf("message_id" to replyTo))
             return mapOf("update_id" to counter.incrementAndGet(), "message" to message).also(bot::handle)
         }
         fun callback(bot: Telegram, chat: Long, data: String) {
