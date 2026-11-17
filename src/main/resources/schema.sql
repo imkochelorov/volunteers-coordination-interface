@@ -1,16 +1,9 @@
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-
-export function openDatabase(path = 'data/coordination.sqlite') {
-  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path);
-  db.exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
-    CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, kind TEXT NOT NULL CHECK(kind IN ('hall','direction')));
+PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
+    CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, kind TEXT NOT NULL CHECK(kind IN ('hall','direction')), color TEXT NOT NULL DEFAULT '');
     CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, login TEXT UNIQUE, password_hash TEXT, roles TEXT NOT NULL DEFAULT '[]', tag_ids TEXT NOT NULL DEFAULT '[]', home_hall_id INTEGER REFERENCES tags(id), manager_id INTEGER REFERENCES users(id), available INTEGER NOT NULL DEFAULT 1, telegram_id INTEGER UNIQUE, chat_id INTEGER, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS task_groups (id INTEGER PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL, author_id INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES task_groups(id), title TEXT NOT NULL, description TEXT NOT NULL, author_id INTEGER NOT NULL REFERENCES users(id), hall_id INTEGER REFERENCES tags(id), tag_ids TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL CHECK(status IN ('queued','in_progress','done','cancelled')), claimed_by INTEGER REFERENCES users(id), assigned_by INTEGER REFERENCES users(id), generation INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, CHECK(claimed_by IS NULL OR assigned_by IS NULL));
+    CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES task_groups(id), title TEXT NOT NULL, description TEXT NOT NULL, author_id INTEGER NOT NULL REFERENCES users(id), hall_id INTEGER REFERENCES tags(id), tag_ids TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL CHECK(status IN ('queued','in_progress','done','cancelled')), claimed_by INTEGER REFERENCES users(id), assigned_by INTEGER REFERENCES users(id), generation INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'normal', needs_strong_volunteers INTEGER NOT NULL DEFAULT 0, volunteer_target TEXT NOT NULL DEFAULT '', CHECK(claimed_by IS NULL OR assigned_by IS NULL));
     CREATE TABLE IF NOT EXISTS assignments (task_id INTEGER NOT NULL REFERENCES tasks(id), volunteer_id INTEGER NOT NULL REFERENCES users(id), accepted_at TEXT, PRIMARY KEY(task_id,volunteer_id));
     CREATE TABLE IF NOT EXISTS personal_tags (id INTEGER PRIMARY KEY, manager_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, UNIQUE(manager_id,name));
     CREATE TABLE IF NOT EXISTS volunteer_personal_tags (volunteer_id INTEGER NOT NULL REFERENCES users(id), personal_tag_id INTEGER NOT NULL REFERENCES personal_tags(id), PRIMARY KEY(volunteer_id,personal_tag_id));
@@ -24,6 +17,7 @@ export function openDatabase(path = 'data/coordination.sqlite') {
     CREATE TABLE IF NOT EXISTS telegram_state (user_id INTEGER PRIMARY KEY REFERENCES users(id), task_id INTEGER, generation INTEGER);
     CREATE TABLE IF NOT EXISTS link_tokens (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), expires_at INTEGER NOT NULL, used_at INTEGER);
     CREATE TABLE IF NOT EXISTS telegram_messages (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id), user_id INTEGER NOT NULL REFERENCES users(id), generation INTEGER NOT NULL, message_id INTEGER NOT NULL, UNIQUE(task_id,user_id,generation));
+    CREATE TABLE IF NOT EXISTS telegram_question_messages (chat_id INTEGER NOT NULL, message_id INTEGER NOT NULL, question_id INTEGER NOT NULL REFERENCES questions(id), PRIMARY KEY(chat_id,message_id));
     CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY, event_key TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, user_id INTEGER REFERENCES users(id), task_id INTEGER REFERENCES tasks(id), payload TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL DEFAULT 0, last_error TEXT, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY,value TEXT);
     CREATE INDEX IF NOT EXISTS assignments_volunteer ON assignments(volunteer_id);
@@ -32,9 +26,4 @@ export function openDatabase(path = 'data/coordination.sqlite') {
     CREATE INDEX IF NOT EXISTS outbox_due ON outbox(status,next_attempt);
     CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id,id);
     PRAGMA user_version = 1;
-  `);
-  const insertTag = db.prepare('INSERT OR IGNORE INTO tags(name,kind) VALUES (?,?)');
-  if (db.prepare('SELECT COUNT(*) AS count FROM tags').get().count === 0) for (const name of ['TC','TC Assistant','Press','Ceremony','Registration','Baloons','Live','Hall 1','Hall 2','Hall 3','Hall 4','Hall 5','Space']) insertTag.run(name, name.startsWith('Hall ') ? 'hall' : 'direction');
-  db.prepare("INSERT OR IGNORE INTO settings(key,value) VALUES ('crossHall','false')").run();
-  return db;
-}
+CREATE TABLE IF NOT EXISTS request_keys (user_id INTEGER NOT NULL, request_key TEXT NOT NULL, fingerprint TEXT NOT NULL, response TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(user_id,request_key));
